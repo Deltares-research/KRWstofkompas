@@ -1,8 +1,30 @@
 # Trendsanlyse
+```{r}
+#| label: chemtrend inladen
+#| echo: false
+#| output: false
+#| message: false
+#| include: false
+#laad libraries, paths en functies
+#source(here::here("scripts", "functies.R"))
+source(here::here("scripts", "paths.R"))
+
+#laad data 
+bestand <- list.files(
+  path = paths$external,
+  pattern = "chemtrend_data_.*\\.parquet$",
+  full.names = TRUE
+) |>
+  (\(x) x[which.max(file.info(x)$mtime)])()
+
+chemtrend_data <- arrow::read_parquet(bestand)
+
+```
+
 In de trendanalyse wordt er gekeken naar de trend van de stof gebaseerd op CHEMtrend. De trendanalyse wordt uitgevoerd op verschillende aggregatieniveaus: landelijk, per stroomgebied, per waterlichaam en per meetpunt. De resultaten van de trendanalyse worden samengevat in een overzichtstabel en visueel weergegeven in kaarten.
 
 ```{r}
-#| label: chemtrend 
+#| label: chemtrend samenvatten
 #| echo: false
 #| output: false
 #| message: false

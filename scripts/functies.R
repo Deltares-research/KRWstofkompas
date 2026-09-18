@@ -1,13 +1,3 @@
-#libraries
-library(tidyverse)
-library(sf)
-library(glue)
-library(patchwork)
-library(here)
-library(leaflet)
-library(htmltools)
-
-
 #hulpfunctie voor het maken van trendcodes voor uniforme kaart en trendconclusies
 maak_trend_code_uniform <- function(x) {
   case_when(
