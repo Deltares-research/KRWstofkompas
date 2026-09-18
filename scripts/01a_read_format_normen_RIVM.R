@@ -11,50 +11,62 @@ library(dplyr)
 source(here::here("scripts", "paths.R"))
 
 
-# Brondirectory en uitvoerbestand voor de gestandaardiseerde normen.
-pad_normen_rivm <- file.path(paths$raw_data, "naamvanfiletje.csv")
+# Brondirectory voor de RIVM-normen.
+pad_normen_rivm <- file.path(paths$raw, "rivm_normen")
 
-pad_normen_rivm_bewerkt <- here::here(
-  "data",
-  "2_external",
-  "normen_rivm.csv"
+# Selecteer het meest recent gewijzigde RIVM-bestand.
+rivm_xlsx_pattern <- "^RvS_normen_[0-9]{8}T[0-9]{4}\\.xlsx$"
+
+bestanden_normen_rivm <- list.files(
+  path = pad_normen_rivm,
+  pattern = rivm_xlsx_pattern,
+  full.names = TRUE,
+  ignore.case = TRUE
 )
-
-# Stel dit in op de naam van het ontvangen RIVM-bestand.
-bestand_normen_rivm <- file.path(
-  pad_normen_rivm,
-  "normen_RIVM.xlsx"
-)
-
-# Controleer de configuratie voordat de leesstap wordt toegevoegd.
-if (!dir.exists(pad_normen_rivm)) {
-  warning(
-    "De RIVM-brondirectory bestaat nog niet: ",
-    pad_normen_rivm,
-    call. = FALSE
-  )
+if (length(bestanden_normen_rivm) == 0L) {
+  stop(glue::glue(
+    "Er is geen recent RIVM-bestand met deze structuur {rivm_xlsx_pattern} gevonden."
+  ))
 }
 
-if (file.exists(bestand_normen_rivm)) {
-  extensie <- tools::file_ext(bestand_normen_rivm)
+bestand_normen_rivm <- {
+  datums_normen_rivm <- as.POSIXct(
+    sub(
+      "^RvS_normen_([0-9]{8}T[0-9]{4})\\.xlsx$",
+      "\\1",
+      basename(bestanden_normen_rivm),
+      ignore.case = TRUE
+    ),
+    format = "%Y%m%dT%H%M",
+    tz = "UTC"
+  )
+  bestanden_normen_rivm[which.max(datums_normen_rivm)]
+}
 
-  normen_rivm_raw <- switch(
-    tolower(extensie),
-    xls = readxl::read_excel(bestand_normen_rivm),
-    xlsx = readxl::read_excel(bestand_normen_rivm),
-    csv = readr::read_csv(bestand_normen_rivm, show_col_types = FALSE),
-    csv2 = readr::read_csv2(bestand_normen_rivm, show_col_types = FALSE),
-    stop(
-      "Bestandstype voor RIVM-normen wordt niet ondersteund: .",
-      extensie,
-      call. = FALSE
+print(glue::glue(
+  "Inlezen van het meest recente RIVM-bestand: ", bestand_normen_rivm
+))
+
+normen_rivm <- readxl::read_excel(bestand_normen_rivm) |>
+  janitor::clean_names() |>
+  dplyr::mutate(across(where(is.character), ~trimws(.))) |>
+  dplyr::mutate(
+    waarde = as.numeric(
+      dplyr::na_if(
+        stringr::str_replace(waarde, ",", "."),
+        "NA"
+      )
     )
+  ) |>
+  dplyr::filter(!is.na(waarde) & !is.na(aquo_code)) |>
+  dplyr::select(
+    stofnaam, cas_nummer, aquo_code, compartiment, norm, norm_code,
+    waarde, eenheid, compartiment_code, compartiment_omschrijving,
+    compartimentsubgroep_code, grootheid_code, hoedanigheid_code,
+    hoedanigheid_omschrijving, waardebewerkingsmethode_code
   )
-} else {
-  normen_rivm_raw <- NULL
-  warning(
-    "Het geconfigureerde RIVM-bronbestand bestaat nog niet: ",
-    bestand_normen_rivm,
-    call. = FALSE
-  )
-}
+
+arrow::write_parquet(
+  normen_rivm,
+  file.path(paths$external, "normen_rivm.parquet")
+)
