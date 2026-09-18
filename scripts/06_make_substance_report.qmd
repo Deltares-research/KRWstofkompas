@@ -1,0 +1,147 @@
+---
+title: "Trend analyse per stof: `r params$stof`"
+
+format:
+  html:
+    embed-resources: true
+    toc: true
+
+output-dir: ../../data/5_output/stof_rapporten
+
+params:
+  stof: ""
+
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: Inladen packages, functies en data
+#| echo: false
+#| output: false
+#| message: false
+#| include: false
+
+
+
+#inladen emissieregistratie data
+#vanaf de site is het een excel. eenmalig inladen en omzetten naar sneller format. 
+# emissies_op_water <-
+#   readxl::read_excel(
+#   "P:/emissieregistratie/2_emissieberekeningen/algemene_datafolder/ER1990_2024/eindexport_van_publieke_site/ER_DataExport-2026-07-13-115035.xlsx", sheet = "Emissies"
+#     )
+# emissies_op_riool <-
+#   readxl::read_excel(
+#   "P:/emissieregistratie/2_emissieberekeningen/algemene_datafolder/ER1990_2024/eindexport_van_publieke_site/ER_DataExport-2026-07-13-115305.xlsx", sheet = "Emissies"
+#     )
+
+# #schrijf weg als parquet eenmalig om het hierna hiermee in te lezen
+#   arrow::write_parquet(
+#   emissies_op_water,
+#   "data/2_external/emissies_op_water.parquet"
+# )
+#   arrow::write_parquet(
+#   emissies_op_riool,
+#   "data/2_external/emissies_op_riool.parquet"
+# )
+
+emissies_op_water <- arrow::read_parquet(
+  "data/2_external/emissies_op_water.parquet"
+)
+
+emissies_op_riool <- arrow::read_parquet(
+  "data/2_external/emissies_op_riool.parquet"
+)
+
+koppeltabel_aquo_er <- readxl::read_excel(
+  "P:/emissieregistratie/2_emissieberekeningen/algemene_datafolder/ER1990_2024/stofcodes_aquo_er_2024_20250613.xlsx"
+)
+
+#selecteer stof
+
+stof <- "Cu"
+#stof <- params$stof
+
+
+  
+
+```
+
+
+# Bronnenanalyse 
+In de bronnenanalyse wordt er gekeken naar de mogelijke bronnen van de stof. Hierbij wordt eerst de Emissieregistratie gebruikt om een landelijk overzicht te maken van de bronnen, zoals ze in de Emissieregistratie staan. Vervolgens worden deze vrachten gekoppeld aan het landelijk waterkwaliteitsmodel om zo de concentraties te berekenen.
+
+Wat willen we hier dan precies mee? even in het rapport van steven kijken. 
+
+
+```{r}
+#| label: emissieregistratie
+#| echo: false
+#| output: false
+#| message: false
+#| include: false
+
+emissie_aandeel_subsector <- emissies_op_riool |>
+  left_join(koppeltabel_aquo_er |>  select(aquokit_stofcode, aquokit_stofnaam, geregistreerde_stofcode) |> mutate(geregistreerde_stofcode = as.character(geregistreerde_stofcode)), by = c("Stofcode" = "geregistreerde_stofcode")) |>
+  filter(Stof == stof) |>
+  group_by(Jaar, Sector) |>
+  summarise(
+    Emissie = sum(Emissie, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  group_by(Jaar) |>
+  mutate(
+    Aandeel = Emissie / sum(Emissie) * 100
+  )
+
+# alleen aandelen >5% tonen
+labels <- emissie_aandeel_subsector |>
+  filter(Aandeel > 5)
+
+# 1. Absolute emissies
+p1 <- ggplot(emissie_aandeel_subsector,
+             aes(x = Jaar, y = Emissie, fill = Sector)) +
+  geom_col() +
+  geom_text(
+    data = labels,
+    aes(label = paste0(round(Aandeel), "%")),
+    position = position_stack(vjust = 0.5),
+    size = 3
+  ) +
+  labs(
+    x = "Jaar",
+    y = "Emissie",
+    fill = "Subsector",
+    title = "Totale emissie"
+  ) +
+  theme_minimal()
+
+
+# 2. Aandeel emissies
+p2 <- ggplot(emissie_aandeel_subsector,
+             aes(x = Jaar, y = Aandeel, fill = Sector)) +
+  geom_col(position = "fill") +
+  geom_text(
+    data = labels,
+    aes(label = paste0(round(Aandeel), "%")),
+    position = position_fill(vjust = 0.5),
+    size = 3
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1)
+  ) +
+  labs(
+    x = "Jaar",
+    y = "Aandeel emissie",
+    fill = "Subsector",
+    title = "Relatieve bijdrage subsectoren"
+  ) +
+  theme_minimal()
+
+
+# combineren met één legenda
+p1 + p2 +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
