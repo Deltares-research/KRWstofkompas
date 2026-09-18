@@ -8,17 +8,11 @@ library(here)
 library(readr)
 library(readxl)
 library(dplyr)
+source(here::here("scripts", "paths.R"))
 
-# Zorg dat paden onafhankelijk zijn van de huidige werkdirectory.
-project_root <- here::here()
 
 # Brondirectory en uitvoerbestand voor de gestandaardiseerde normen.
-pad_normen_rivm <- here::here(
-  "data",
-  "1_raw",
-  "normen",
-  "RIVM"
-)
+pad_normen_rivm <- file.path(paths$raw_data, "naamvanfiletje.csv")
 
 pad_normen_rivm_bewerkt <- here::here(
   "data",
