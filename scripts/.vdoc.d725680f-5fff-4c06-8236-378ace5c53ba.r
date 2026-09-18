@@ -1,5 +1,5 @@
-# Trendsanlyse
-```{r}
+#
+#
 #| label: chemtrend inladen
 #| echo: false
 #| output: false
@@ -8,60 +8,30 @@
 #laad libraries, paths en functies
 source(here::here("scripts", "functies.R"))
 source(here::here("scripts", "paths.R"))
-source(here::here("scripts", "01c_read_gis_data.R"))
-library(tidyverse)
-library(sf)
-library(leaflet)
-
-#om een stof te testen moeten we even een stof als voorbeeld nemen
-stof <- "Cd"
 
 #laad data 
 #chemtrend data
 bestand <- list.files(
   path = paths$external,
-  pattern = "chemtrend_data_.*\\.parquet$",
+  pattern = "chemtrend_data_.*\\.qs2$",
   full.names = TRUE
 ) |>
   (\(x) x[which.max(file.info(x)$mtime)])()
 
-chemtrend_data <- arrow::read_parquet(bestand) |> 
-  filter(parameter_code == stof) |> 
-  left_join(
-    gis_stroomgebied |>
-      select(NAAM, geometry_stroomgebied = geometry),
-    by = c("regio_omschrijving" = "NAAM")
-  ) |>
-  left_join(
-    gis_waterlichaam |>
-      select(owl_naam, geometry_waterlichaam = geometry),
-    by = c("regio_omschrijving" = "owl_naam")
-  ) |>
-  mutate(
-    geometry = case_when(
-      aggregatieniveau == "Stroomgebied" ~ geometry_stroomgebied,
-      aggregatieniveau == "Waterlichaam" ~ geometry_waterlichaam
-    )
-  ) |>
-  select(
-    aggregatieniveau,
-    regio_omschrijving,
-    parameter_code,
-    parameter_naam,
-    everything(),
-    -geometry_stroomgebied,
-    -geometry_waterlichaam
-  )
-```
-
-In de trendanalyse wordt er gekeken naar de trend van de stof gebaseerd op de data die ook te vinden is in CHEMtrend. De trendanalyse wordt uitgevoerd op verschillende aggregatieniveaus: landelijk, per stroomgebied, per waterlichaam en per meetpunt. De resultaten van de trendanalyse worden samengevat in een overzichtstabel en visueel weergegeven in kaarten.
-
-```{r}
+chemtrend_data <- qs2::qs_read(bestand)
+#
+#
+#
+#
+#
 #| label: chemtrend samenvatten
 #| echo: false
 #| output: false
 #| message: false
 #| include: false
+
+#om een stof te testen moeten we even een stof als voorbeeld nemen
+stof <- "Cd"
 
 overzicht_trend <- chemtrend_data |>
   filter(parameter_code == stof) |> 
@@ -84,17 +54,17 @@ richting_landelijk <- case_when(
   overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Landelijk"] == 1 ~ "niet significante"
 )
 
-```
-
-De landelijke trend voor **`r stof`** is **`r richting_landelijk`** .
-
-Op regionaal niveau zijn verschillen zichtbaar tussen de stroomgebieden. Van de **`r overzicht_trend$aantal[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** onderzochte stroomgebieden laten **`r overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** een neerwaartse trend zien, **`r overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** stroomgebieden tonen een opwaartse trend en **`r overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** hebben geen significante trend.
-
-Voor de onderliggende waterlichamen zijn er **`r overzicht_trend$aantal[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen waarvoor een trendberekening gedaan kon worden. Hierbij wordt in **`r overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen een neerwaartse trend gevonden, in **`r overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen een opwaartse trend en in **`r overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen geen significante trend.
-
-Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @chemtrend-tabel-overzicht. De ruimtelijke verdeling van de trends is weergegeven in @fig-chemtrend-kaarten. In @chemtrend-interactieve-kaart kaart kan per aggregatieniveau worden in- en uitgezoomd.
-
-```{r}
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 #| label: chemtrend-tabel-overzicht
 #| echo: false
 #| output: true
@@ -132,15 +102,14 @@ Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @che
   caption = paste("Trendoverzicht", stof)
 )
 
-```
-
-```{r}
+#
+#
+#
 #| label: fig-chemtrend-data
 #| echo: false
 #| message: false
 
 stroomgebied <- chemtrend_data |>
-  filter(parameter_code == stof) |> 
   filter(aggregatieniveau == "Stroomgebied") |>
   select(
     regio_omschrijving,
@@ -151,7 +120,6 @@ stroomgebied <- chemtrend_data |>
   sf::st_as_sf()
 
 waterlichaam <- chemtrend_data |>
-  filter(parameter_code == stof) |> 
   filter(aggregatieniveau == "Waterlichaam") |>
   select(
     regio_omschrijving,
@@ -160,9 +128,9 @@ waterlichaam <- chemtrend_data |>
   ) |>
   distinct() |>
   sf::st_as_sf()
-```
-
-```{r}
+#
+#
+#
 #| label: fig-chemtrend-kaarten
 #| fig-cap: "Trends voor {stof} op stroomgebied- en waterlichaamniveau."
 #| fig-subcap:
@@ -208,24 +176,17 @@ ggplot() +
     guide = "none"
   ) +
   theme_void()
-```
-
-```{r}
+#
+#
+#
 #| label: chemtrend-interactieve-kaart
-#| fig-cap: "Trends voor {stof} op stroomgebied- en waterlichaamniveau."
 #| echo: false
 #| output: true
 #| message: false
 
 
-stroomgebied <- st_transform(stroomgebied, 4326) |> 
-  mutate(
-    trend_kleur = unname(trend_kleur[trend_kleur_code])
-  )
-waterlichaam <- st_transform(waterlichaam, 4326) |>
-  mutate(
-    trend_kleur = unname(trend_kleur[trend_kleur_code])
-  )
+stroomgebied <- st_transform(stroomgebied, 4326)
+waterlichaam <- st_transform(waterlichaam, 4326)
 
 leaflet(
   options = leafletOptions(preferCanvas = TRUE)
@@ -246,23 +207,11 @@ leaflet(
     weight = 1,
     fillOpacity = 0.6,
 
-    label = ~regio_omschrijving,
-    labelOptions = labelOptions(
-      direction = "auto",
-      textsize = "13px",
-      opacity = 0.9
-    ),
-
     popup = ~glue::glue(
       "<b>Stroomgebied</b><br>",
-      "{regio_omschrijving}",
+      "{NAAM}",
       "<br><br>",
       "<b>Trend:</b> {trend_kleur_code}"
-    ),
-
-    highlightOptions = highlightOptions(
-      weight = 2,
-      bringToFront = TRUE
     )
   ) |>
 
@@ -275,29 +224,17 @@ leaflet(
     group = "Waterlichamen",
 
     fillColor = ~trend_kleur,
-    color = "white",
+    color = ~trend_kleur,
 
     weight = 1,
     fillOpacity = 0.8,
-
-    label = ~regio_omschrijving,
-    labelOptions = labelOptions(
-      direction = "auto",
-      textsize = "13px",
-      opacity = 0.9
-    ),
 
     popup = ~glue::glue(
       "<b>Waterlichaam</b><br>",
       "{regio_omschrijving}",
       "<br><br>",
-      "<b>Trend:</b> {trend_kleur_code}"
-    ),
-
-    highlightOptions = highlightOptions(
-      weight = 2,
-      bringToFront = TRUE
-    )
+      "<b>Trend:</b> {trend_kleur_code}",
+      "<br>"    )
   ) |>
 
   # -----------------------------------
@@ -313,16 +250,20 @@ leaflet(
   ) |>
 
   # -----------------------------------
-  # Lagen aan/uit
+  # Lagen
   # -----------------------------------
 
   addLayersControl(
     overlayGroups = c(
       "Stroomgebieden",
-      "Waterlichamen"
+      "Waterlichamen",
+      "Meetpunten"
     ),
     options = layersControlOptions(
       collapsed = FALSE
     )
   )
-```
+#
+#
+#
+#

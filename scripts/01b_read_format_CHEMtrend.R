@@ -1,7 +1,6 @@
 # inladen chemtrend data
 source(here::here("scripts", "functies.R"))
 source(here::here("scripts", "paths.R"))
-source(here::here("scripts", "01c_read_gis_data.R"))
 
 parameters <- aquodom::dom('Parameter')
 
@@ -12,6 +11,7 @@ arrow::write_parquet(
     paste0("aquo_parameters_", settings$run_date, ".parquet")
   )
 )
+
 
 trend_info_landelijk <-
   readr::read_csv2(
@@ -69,37 +69,12 @@ chemtrend_data <- dplyr::bind_rows(
   trend_info_landelijk,
   trend_info_per_stroomgebied,
   trend_info_per_waterlichaam
-) |>
-  left_join(
-    gis_stroomgebied |>
-      select(NAAM, geometry_stroomgebied = geometry),
-    by = c("regio_omschrijving" = "NAAM")
-  ) |>
-  left_join(
-    gis_waterlichaam |>
-      select(owl_naam, geometry_waterlichaam = geometry),
-    by = c("regio_omschrijving" = "owl_naam")
-  ) |>
-  mutate(
-    geometry = case_when(
-      aggregatieniveau == "Stroomgebied" ~ geometry_stroomgebied,
-      aggregatieniveau == "Waterlichaam" ~ geometry_waterlichaam
-    )
-  ) |>
-  select(
-    aggregatieniveau,
-    regio_omschrijving,
-    parameter_code,
-    parameter_naam,
-    everything(),
-    -geometry_stroomgebied,
-    -geometry_waterlichaam
-  )
+)
 
-qs2::qs_save(
+arrow::write_parquet(
   chemtrend_data,
   file.path(
     paths$external,
-    paste0("chemtrend_data_formatted", settings$run_date, ".qs2")
+    paste0("chemtrend_data_formatted", settings$run_date, ".parquet")
   )
 )
