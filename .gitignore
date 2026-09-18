@@ -52,3 +52,6 @@ rsconnect/
 *.html
 
 
+# pixi environments
+.pixi/*
+!.pixi/config.toml

@@ -1,0 +1,12 @@
+[workspace]
+authors = ["KeesWesdorp1 <kees.wesdorp@deltares.nl>"]
+channels = ["conda-forge"]
+name = "github"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+r = "R"
+
+[dependencies]
+r = ">=4.5,<4.6"
