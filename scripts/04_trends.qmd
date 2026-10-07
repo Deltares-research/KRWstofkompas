@@ -443,7 +443,8 @@ leaflet() |>
     colors = unname(trend_kleur),
     labels = names(trend_kleur),
     opacity = 1,
-    title = "Trend"
+    title = "Trend",
+    className = "legend-left"
   ) |>
   addLayersControl(
     overlayGroups = c(
@@ -453,6 +454,13 @@ leaflet() |>
     ),
     options = layersControlOptions(
       collapsed = FALSE
+    )
+  ) |>
+  htmlwidgets::prependContent(
+    htmltools::tags$style(
+      htmltools::HTML(
+        ".legend-left { text-align: left; }\n.legend-left i { float: left; margin-right: 8px; }"
+      )
     )
   ) |>
   hideGroup(c("Stroomgebieden", "Meetpunten"))
