@@ -79,7 +79,7 @@ chemtrend_trend_info <- arrow::read_parquet(bestand) |>
   )
 ```
 
-In de trendanalyse wordt er gekeken naar de trend van de stof gebaseerd op de data die ook te vinden is in [CHEMtrend](https://chemtrend.netlify.app/trends?period=1). De trendanalyse wordt uitgevoerd op verschillende aggregatieniveaus: landelijk, per stroomgebied, per waterlichaam en per meetpunt. De resultaten van de trendanalyse worden samengevat in een overzichtstabel en visueel weergegeven in kaarten.
+In de trendanalyse wordt er gekeken naar de trend van de stof gebaseerd op de data die ook te vinden is in CHEMtrend. De trendanalyse wordt uitgevoerd op verschillende aggregatieniveaus: landelijk, per stroomgebied, per waterlichaam en per meetpunt. De resultaten van de trendanalyse worden samengevat in een overzichtstabel en visueel weergegeven in kaarten.
 
 ```{r}
 #| label: chemtrend samenvatten
@@ -457,3 +457,4 @@ leaflet() |>
   ) |>
   hideGroup(c("Stroomgebieden", "Meetpunten"))
 ```
+
