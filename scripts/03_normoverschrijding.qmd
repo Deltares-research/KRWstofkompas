@@ -1,0 +1,157 @@
+# Normoverschrijding
+```{r}
+#| label: toetsoordelen inladen
+#| echo: false
+#| output: false
+#| message: false
+#| include: false
+#laad libraries, paths en functies
+source(here::here("scripts", "functies.R"))
+source(here::here("scripts", "paths.R"))
+source(here::here("scripts", "01c_read_gis_data.R"))
+source(here::here("scripts", "01e_read_toetsoordelen_wkp.R"))
+library(tidyverse)
+library(sf)
+library(leaflet)
+
+#om een stof te testen moeten we even een stof als voorbeeld nemen
+stof <- "Cd"
+```
+
+```{r}
+#| label: toetsoordelen samenvatten
+toetsoordelen_stof <- toetsoordelen_wkp |>
+  filter(ParameterCode == stof)
+
+kwaliteitsoordelen_stof <- toetsoordelen_stof |>
+  group_by(KwaliteitsoordeelCode, KwaliteitsoordeelOmschrijving) |>
+  summarise(aantal_totaal = n(), .groups = "drop")
+
+type_metingen <- toetsoordelen_stof |>
+  filter(KwaliteitsoordeelCode == 0) |>
+  group_by(GrootheidOmschrijving, ClassificatieOmschrijving, EenheidCode,
+           HoedanigheidOmschrijving, HoedanigheidCode,
+           WaardebewerkingsmethodeCode, WaardebepalingsmethodeOmschrijving) |>
+  summarise(aantal_totaal = n(), .groups = "drop")
+
+overzicht_toetsoordelen_landelijk <- toetsoordelen_stof |>
+  group_by(GrootheidOmschrijving, ClassificatieOmschrijving, EenheidCode,
+           WaardebewerkingsmethodeCode, WaardebepalingsmethodeOmschrijving) |>
+  summarise(aantal_totaal = n(), .groups = "drop")
+
+overzicht_toetsoordelen_waterbeheerder <- toetsoordelen_stof |>
+  group_by(WaterbeheerderNaam, GrootheidOmschrijving, ClassificatieOmschrijving) |>
+  summarise(aantal_totaal = n(), .groups = "drop")
+
+hoedanigheden <- toetsoordelen_stof |>
+  distinct(HoedanigheidOmschrijving, HoedanigheidCode)
+
+n_totaal <- nrow(toetsoordelen_stof)
+n_normaal <- sum(kwaliteitsoordelen_stof$aantal_totaal[kwaliteitsoordelen_stof$KwaliteitsoordeelCode == 0])
+jaren <- range(toetsoordelen_stof$Meetjaar, na.rm = TRUE)
+n_voldoet_niet <- sum(overzicht_toetsoordelen_landelijk$aantal_totaal[
+  overzicht_toetsoordelen_landelijk$ClassificatieOmschrijving == "Voldoet niet"])
+```
+
+
+
+Dit hoofdstuk geeft een overzicht van de toetsoordelen voor de stof **`r stof`** uit de KRW-toetsing gedownload van het [Waterwaliteitsportaal](https://wkp.rws.nl/downloadmodule). Het beschrijft welke toetsoordelen zijn uitgevoerd, hoe die zijn verdeeld over waterbeheerders en meetjaren, en wat de uitkomst van de toetsing is. In totaal zijn er `r format(n_totaal, big.mark = ".", decimal.mark = ",")` toetsoordelen voor meetjaren `r jaren[1]` t/m `r jaren[2]`.
+
+## Kwaliteit van de toetsoordelen
+
+Tabel 1 toont de kwaliteitsoordelen die bij de toetsoordelen horen. `r n_normaal` van de `r n_totaal` toetsoordelen (`r round(100 * n_normaal / n_totaal, 1)`%) heeft de code 0 (normale waarde). De overige toetsoordelen zijn gevlagd of op onvolledige basis bepaald en moeten met voorzichtigheid worden gebruikt.
+
+```{r}
+#| label: tbl-kwaliteit
+#| tbl-cap: "Aantal toetsoordelen per kwaliteitsoordeel."
+kwaliteitsoordelen_stof |>
+  kable(col.names = c("Code", "Omschrijving", "Aantal"),
+        format.args = list(big.mark = "."))
+```
+
+## Type metingen
+
+Tabel 2 geeft weer welke typen metingen aan de toetsoordelen met een normale waarde ten grondslag liggen: per grootheid, eenheid, hoedanigheid, waardebewerking (JGM = jaargemiddelde, MAX = maximum) en waardebepalingsmethode. Tabel 3 geeft de bijbehorende hoedanigheden.
+
+```{r}
+#| label: tbl-type-metingen
+type_metingen |>
+  kable(caption = "Tabel 2. Typen metingen (alleen kwaliteitsoordeel 0).",
+        format.args = list(big.mark = "."))
+```
+
+```{r}
+#| label: tbl-hoedanigheden
+hoedanigheden |>
+  kable(caption = "Tabel 3. Voorkomende hoedanigheden.")
+```
+
+## Landelijk overzicht van de toetsoordelen
+
+Tabel 4 vat de toetsoordelen landelijk samen per grootheid, klassificatie, eenheid en waardebewerking. Hierin is te zien welke toetsingen zijn gedaan en hoe vaak de uitkomst "Voldoet", "Voldoet niet" of "Niet toetsbaar" is. In totaal hebben `r n_voldoet_niet` toetsoordelen de uitkomst "Voldoet niet".
+
+```{r}
+#| label: tbl-landelijk
+overzicht_toetsoordelen_landelijk |>
+  kable(caption = "Tabel 4. Landelijk overzicht van toetsoordelen.",
+        format.args = list(big.mark = "."))
+```
+
+Figuur 1 laat dezelfde klassificatie zien over de tijd (meetjaar), per waardebewerkingsmethode en grootheid.
+
+```{r}
+#| label: fig-landelijk
+#| fig-cap: "Figuur 1. Aantal toetsoordelen per meetjaar, naar klassificatie."
+#| fig-height: 6
+toetsoordelen_stof |>
+  count(Meetjaar, GrootheidOmschrijving, WaardebewerkingsmethodeCode,
+        ClassificatieOmschrijving) |>
+  ggplot(aes(x = factor(Meetjaar), y = n, fill = ClassificatieOmschrijving)) +
+  geom_col() +
+  facet_grid(GrootheidOmschrijving ~ WaardebewerkingsmethodeCode, scales = "free_y") +
+  scale_x_discrete(breaks = \(x) x[as.integer(x) %% 2 == 0]) +
+  labs(x = "Meetjaar", y = "Aantal toetsoordelen", fill = "Klassificatie") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+## Overzicht per waterbeheerder
+
+Tabel 5 toont het aantal toetsoordelen per waterbeheerder, grootheid en klassificatie, en maakt zichtbaar waar toetsingen zijn uitgevoerd en waar normen worden overschreden.
+
+```{r}
+#| label: tbl-waterbeheerder
+overzicht_toetsoordelen_waterbeheerder |>
+  kable(caption = "Tabel 5. Toetsoordelen per waterbeheerder.",
+        format.args = list(big.mark = "."))
+```
+
+## Meetobjecten die niet voldoen
+
+```{r}
+#| label: voldoet-niet-data
+voldoet_niet <- toetsoordelen_stof |>
+  filter(ClassificatieOmschrijving == "Voldoet niet") |>
+  group_by(WaterbeheerderNaam, MeetobjectCode, GrootheidOmschrijving,
+           WaardebewerkingsmethodeCode) |>
+  summarise(
+    aantal = n(),
+    meetjaren = str_c(sort(unique(Meetjaar)), collapse = ", "),
+    .groups = "drop"
+  ) |>
+  arrange(WaterbeheerderNaam, desc(aantal))
+```
+
+In Tabel 6 staan de meetobjecten waarvoor minstens één toetsoordeel "Voldoet niet" is. Het gaat om `r sum(voldoet_niet$aantal)` toetsoordelen op `r n_distinct(voldoet_niet$MeetobjectCode)` meetobjecten bij `r n_distinct(voldoet_niet$WaterbeheerderNaam)` waterbeheerders. De meetobjectcodes in de WKP-download zijn niet te koppelen aan de waterlichaamcodes in de GIS-laag, waardoor hier geen kaart wordt getoond.
+
+```{r}
+#| label: tbl-voldoet-niet
+voldoet_niet |>
+  kable(caption = "Tabel 6. Meetobjecten met toetsoordeel 'Voldoet niet'.",
+        col.names = c("Waterbeheerder", "Meetobject", "Grootheid", "Bewerking",
+                      "Aantal", "Meetjaren"))
+```
+
+## Conclusie
+
+De toetsoordelen voor `r stof` zijn gebaseerd op de in Tabel 2 en 4 genoemde combinaties van grootheid en waardebewerking. De verdeling over klassificaties (Tabel 4, Figuur 1) geeft aan in welke mate de norm wordt gehaald; de verschillen tussen waterbeheerders staan in Tabel 5. Let op dat een deel van de toetsoordelen betrekking heeft op de normfractie en een deel op de concentratie, en dat aantallen toetsoordelen geen aantallen waterlichamen zijn.
