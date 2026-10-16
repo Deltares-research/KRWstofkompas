@@ -1,7 +1,15 @@
 {
-  "r.rterm.windows": "C:\\Users\\wesdorp\\.pixi\\bin\\pixi.exe",
+  "positron.r.customBinaries": [
+    "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe"
+  ],
+  "positron.r.customRootFolders": [
+    "C:\\Users\\wesdorp\\.uvr\\r-versions"
+  ],
+  "positron.r.interpreters.default": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
+  "r.rpath.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
   "r.rterm.option": [
     "run",
     "R"
-  ]
+  ],
+  "r.rterm.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe"
 }
