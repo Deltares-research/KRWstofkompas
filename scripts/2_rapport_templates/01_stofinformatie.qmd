@@ -1,3 +1,4 @@
+# Algemene stofinformatie
 ```{r}
 #| label: rivm-normen-inladen
 #| echo: false
@@ -28,8 +29,6 @@ if (nrow(normen_stof) > 0L) {
   rivm_info <- NULL
 }
 ```
-
-## Stofinformatie voor `r stof`
 
 ```{r}
 #| label: rivm-stofgegevens-blok
@@ -152,6 +151,10 @@ if (nrow(normen_stof) == 0L) {
     compartimenten <- c(compartimenten, NA_character_)
   }
 
+  cat("::: {.normen-kaart}\n\n")
+  cat('<div class="stofinfo-kop"><div><h3>Normen</h3><span>RIVM-normen per compartiment</span></div></div>\n\n')
+  cat("::: {.panel-tabset}\n\n")
+
   for (compartiment_naam in compartimenten) {
     normen_compartiment <- if (is.na(compartiment_naam)) {
       normen_stof |>
@@ -166,16 +169,8 @@ if (nrow(normen_stof) == 0L) {
     } else {
       compartiment_naam
     }
-    details_open <- compartiment_naam %in% c(
-      "Oppervlaktewater zoet",
-      "Oppervlaktewater zout"
-    )
-    open_attribuut <- if (details_open) " open" else ""
 
-    cat('<details class="normen-compartiment-blok"', open_attribuut, '>\n', sep = "")
-    cat('<summary class="normen-compartiment">',
-        htmltools::htmlEscape(compartiment_label),
-        '</summary>\n', sep = "")
+    cat("### ", compartiment_label, "\n\n", sep = "")
 
     subgroepen <- unique(normen_compartiment$compartimentsubgroep_code)
     for (subgroep in subgroepen) {
@@ -188,9 +183,9 @@ if (nrow(normen_stof) == 0L) {
       }
 
       if (!is.na(subgroep)) {
-        cat('<h4 class="normen-subgroep">',
+        cat('\n<h4 class="normen-subgroep">',
             htmltools::htmlEscape(subgroep),
-            '</h4>\n', sep = "")
+            '</h4>\n\n', sep = "")
       }
 
       normen_tabel <- normen_subgroep |>
@@ -224,18 +219,18 @@ if (nrow(normen_stof) == 0L) {
           )
         )
 
-      cat('<div class="table-responsive">\n')
+      cat('\n<div class="table-responsive">\n')
       cat(knitr::kable(
         normen_tabel,
         format = "html",
         escape = TRUE,
         table.attr = 'class="table table-striped table-hover table-sm normen-tabel"'
       ))
-      cat("\n</div>\n")
+      cat("\n</div>\n\n")
     }
-
-    cat("</details>\n")
   }
+
+  cat(":::\n\n:::\n")
 }
 ```
 

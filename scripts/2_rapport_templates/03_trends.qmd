@@ -1,4 +1,4 @@
-# Trendanalyse
+# Trends
 ```{r}
 #| label: chemtrend inladen
 #| echo: false
@@ -18,6 +18,12 @@ chemtrend_meetpunten <- arrow::read_parquet(
 )
 chemtrend_landelijk_lowess <- arrow::open_dataset(
   nieuwste_bestand(paths$interim, "chemtrend_lowess_landelijk")
+) |>
+  filter(parameter_code == stof) |>
+  collect()
+
+chemtrend_lowline_meetpunt <- arrow::open_dataset(
+  nieuwste_bestand(paths$interim, "chemtrend_lowline_meetpunt")
 ) |>
   filter(parameter_code == stof) |>
   collect()
@@ -120,61 +126,59 @@ De landelijke trend voor **`r stof`** is **`r richting_landelijk`** (zie @fig-la
 
 ```{r}
 #| label: fig-landelijk-trend
-#| fig-cap: "Landelijke trend {stof}. De grijze stippellijnen geven de 25e en 75e percentiel van de landelijke concentraties weer. De gekleurde lijn geeft de gemiddelde landelijke trend weer en of deze significant opwaarts of neerwaarts is."
+#| fig-cap: "Landelijke trend. De grijze lijnen zijn de lowess-lijnen per meetpunt, de doorgetrokken lijn is de landelijke lowess-trend en de stippellijnen geven het 25e en 75e percentiel weer. De kleur geeft de landelijke trendconclusie weer."
 #| echo: false
 #| output: true
 #| message: false
 
-landelijk_trend <- chemtrend_trend_info |>
-  filter(
-    aggregatieniveau == "Landelijk",
-    parameter_code == stof
-  ) |>
-  slice(1)
-
-landelijk_kleur <- unname(trend_kleur[landelijk_trend$trend_conclusie])
-
 lowess_stof <- chemtrend_landelijk_lowess |>
-  filter(parameter_code == stof)
-
-
-
-ggplot() +
-  geom_line(
-    data = lowess_stof,
-    aes(x = datum, y = lowess_p25),
-    colour = "grey60",
-    linetype = "dotted",
-    linewidth = 0.8,
-    na.rm = TRUE
-  ) +
-  geom_line(
-    data = lowess_stof,
-    aes(x = datum, y = lowess_p75),
-    colour = "grey60",
-    linetype = "dotted",
-    linewidth = 0.8,
-    na.rm = TRUE
-  ) +
-  # geom_line(
-  #   data = lowess_stof,
-  #   aes(x = datum, y = lowess_p50),
-  #   colour = landelijk_kleur,
-  #   linewidth = 1.2,
-  #   na.rm = TRUE
-  # ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(
-    title = paste("Landelijke trend voor", stof),
-    x = NULL,
-    y = "Concentratie"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 17),
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
+  mutate(
+    lijn = recode(p, "0" = "Landelijke lowess", "25" = "25e percentiel", "75" = "75e percentiel"),
+    hover = str_c(lijn, "<br>", format(datum, "%d-%m-%Y"), ": ", signif(y, 3))
   )
+
+eenheid <- str_c(unique(lowess_stof$eenheid_code), collapse = ", ")
+
+landelijk_conclusie <- chemtrend_trend_info |>
+  filter(aggregatieniveau == "Landelijk") |>
+  pull(trend_conclusie) |>
+  first(default = "Te weinig metingen voor een trend")
+landelijk_kleur <- unname(trend_kleur[landelijk_conclusie])
+
+meetpunt_lijnen <- chemtrend_lowline_meetpunt |>
+  mutate(hover = str_c(meetpunt_code_nieuw, "<br>", format(datum, "%d-%m-%Y"), ": ", signif(lowline_y, 3)))
+
+# Zelfde figuur als 04B_aggregate_trends_landelijk_vanaf_2009.R in CHEMtrend
+p_landelijk <- ggplot(meetpunt_lijnen, aes(x = datum, y = lowline_y, text = hover)) +
+  geom_line(
+    aes(group = meetpunt_code_nieuw),
+    col = "grey90",
+    linewidth = 0.2,
+    na.rm = TRUE
+  ) +
+  geom_line(
+    data = filter(lowess_stof, p == "0"),
+    aes(y = y, group = lijn),
+    col = landelijk_kleur,
+    na.rm = TRUE
+  ) +
+  geom_line(
+    data = filter(lowess_stof, p != "0"),
+    aes(y = y, group = lijn),
+    col = landelijk_kleur,
+    linetype = "dashed",
+    na.rm = TRUE
+  ) +
+  coord_cartesian(ylim = c(0, max(lowess_stof$y, na.rm = TRUE) * 1.05)) +
+  labs(x = NULL, y = glue::glue("{stof} [{eenheid}]")) +
+  theme_classic(base_family = rapport_font) +
+  theme(panel.grid.major.y = element_line(
+    colour = "grey90",
+    linewidth = 0.5,
+    linetype = "dotted"
+  ))
+
+ggplotly(p_landelijk, tooltip = "text")
 ```
 
 Op regionaal niveau zijn verschillen zichtbaar tussen de stroomgebieden. Van de **`r overzicht_trend$aantal_totaal[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** onderzochte stroomgebieden laten **`r overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** een neerwaartse trend zien, **`r overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** stroomgebieden tonen een opwaartse trend en **`r overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** hebben geen significante trend.
@@ -185,7 +189,7 @@ Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @tbl
 
 ```{r}
 #| label: tbl-chemtrend-tabel-overzicht
-#| tbl-cap: "Overzicht van de trendresultaten voor {stof} per aggregatieniveau."
+#| tbl-cap: !expr paste0("Overzicht van de trendresultaten voor ", stof, " per aggregatieniveau.")
 #| echo: false
 #| output: true
 #| message: false
@@ -229,7 +233,7 @@ Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @tbl
 
 ```
 
-De ruimtelijke verdeling van de trends is weergegeven in @fig-chemtrend-kaarten. In @fig-chemtrend-interactieve-kaart kaart kan per aggregatieniveau worden in- en uitgezoomd.
+De ruimtelijke verdeling van de trends is weergegeven in @fig-chemtrend-interactieve-kaart, waarin per aggregatieniveau kan worden in- en uitgezoomd. Daaronder staan in een uitklapblok tabbladen met kaarten per stroomgebied (@fig-chemtrend-stroomgebied), waterlichaam (@fig-chemtrend-waterlichaam) en meetpunt (@fig-chemtrend-meetpunt).
 
 ```{r}
 #| label: fig-chemtrend-data
@@ -279,91 +283,8 @@ meetpunt <- chemtrend_trend_info |>
 ```
 
 ```{r}
-#| label: fig-chemtrend-kaarten
-#| fig-cap: "Trends voor {stof} op (a) stroomgebied-, (b) waterlichaam- en (c) meetpuntniveau."
-#| fig-subcap:
-#|   - "Stroomgebieden"
-#|   - "Waterlichamen"
-#|   - "Meetpunten"
-#| layout-ncol: 1
-#| echo: false
-#| message: false
-
-ggplot() +
-  geom_sf(
-    data = stroomgebied,
-    aes(fill = trend_conclusie), 
-    colour = "white",
-    linewidth = 0.2
-  ) +
-  scale_fill_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    guide = "none"
-  ) +
-  scale_colour_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    guide = "none"
-  ) +
-  theme_void()
-
-ggplot() +
-  geom_sf(
-    data = waterlichaam,
-    aes(
-      fill = trend_conclusie,
-      colour = trend_conclusie
-    ),
-    linewidth = 0.3
-  ) +
-  scale_fill_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    guide = "none"
-  ) +
-  scale_colour_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    guide = "none"
-  ) +
-  theme_void()
-
-ggplot() +
-  geom_sf(
-    data = meetpunt,
-    aes(
-      fill = trend_conclusie,
-      colour = trend_conclusie
-    ),
-    size = 2,
-    shape = 21
-  ) +
-  scale_fill_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    name = "Trend",
-    guide = guide_legend(
-      ncol = 2,
-      byrow = TRUE
-    )
-  ) +
-  scale_colour_manual(
-    values = trend_kleur,
-    drop = FALSE,
-    name = "Trend",
-    guide = "none"
-  ) +
-  theme_void() +
-  theme(
-    legend.position = "bottom"
-  )
-
-```
-
-```{r}
 #| label: fig-chemtrend-interactieve-kaart
-#| fig-cap: "Trends voor {stof} op stroomgebied- en waterlichaamniveau."
+#| fig-cap: !expr paste0("Trends voor ", stof, " op stroomgebied-, waterlichaam- en meetpuntniveau.")
 #| echo: false
 #| output: true
 #| message: false
@@ -442,7 +363,8 @@ leaflet() |>
     labels = names(trend_kleur),
     opacity = 1,
     title = "Trend",
-    className = "legend-left"
+    # "info legend" behouden, anders verliest leaflet de stijl van de kleurvakjes
+    className = "info legend legend-left"
   ) |>
   addLayersControl(
     overlayGroups = c(
@@ -463,3 +385,73 @@ leaflet() |>
   ) |>
   hideGroup(c("Stroomgebieden", "Meetpunten"))
 ```
+
+```{r}
+#| label: trendkaarten-opmaak
+#| echo: false
+schaal_trend <- list(
+  scale_fill_manual(values = trend_kleur, drop = FALSE, name = "Trend",
+                    guide = guide_legend(ncol = 2, byrow = TRUE)),
+  scale_colour_manual(values = trend_kleur, drop = FALSE, guide = "none"),
+  theme_void(base_family = rapport_font),
+  theme(legend.position = "bottom")
+)
+```
+
+::: {.callout-note collapse="true" title="Bekijk de trendkaarten per stroomgebied, waterlichaam en meetpunt" appearance="minimal" icon="false"}
+
+::: {.panel-tabset}
+
+### Stroomgebied
+
+```{r}
+#| label: fig-chemtrend-stroomgebied
+#| fig-cap: !expr paste0("Trends voor ", stof, " per stroomgebied.")
+#| echo: false
+#| message: false
+ggplot() +
+  geom_sf(
+    data = stroomgebied,
+    aes(fill = trend_conclusie),
+    colour = "white",
+    linewidth = 0.2
+  ) +
+  schaal_trend
+```
+
+### Waterlichaam
+
+```{r}
+#| label: fig-chemtrend-waterlichaam
+#| fig-cap: !expr paste0("Trends voor ", stof, " per waterlichaam.")
+#| echo: false
+#| message: false
+ggplot() +
+  geom_sf(
+    data = waterlichaam,
+    aes(fill = trend_conclusie, colour = trend_conclusie),
+    linewidth = 0.3
+  ) +
+  schaal_trend
+```
+
+### Meetpunt
+
+```{r}
+#| label: fig-chemtrend-meetpunt
+#| fig-cap: !expr paste0("Trends voor ", stof, " per meetpunt.")
+#| echo: false
+#| message: false
+ggplot() +
+  geom_sf(
+    data = meetpunt,
+    aes(fill = trend_conclusie, colour = trend_conclusie),
+    size = 2,
+    shape = 21
+  ) +
+  schaal_trend
+```
+
+:::
+
+:::

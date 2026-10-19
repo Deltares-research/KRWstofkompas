@@ -1,24 +1,82 @@
-/* Huisstijl stofrapport, gebaseerd op 02_general_overview */
+/* Huisstijl stofrapport in Deltares-kleuren */
+
+:root {
+  --dl-zwart: #000000;
+  --dl-blauw1: #080c80;
+  --dl-blauw2: #0d38e0;
+  --dl-blauw3: #0ebbf0;
+  --dl-groen1: #00b389;
+  --dl-groen2: #00cc96;
+  --dl-groen3: #00e6a1;
+  --dl-grijs1: #f2f2f2;
+  --dl-grijs2: #e6e6e6;
+  --dl-geel: #ffd814;
+  --dl-academy: #ff960d;
+  --dl-tekst-licht: #4d4d4d;
+  /* zelfde lettertype als de figuren (rapport_font in setup.R) */
+  --dl-font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body,
+.leaflet-container,
+.dataTables_wrapper {
+  font-family: var(--dl-font);
+}
+
+#title-block-header {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 0.5rem;
+  background: var(--dl-blauw1);
+}
+
+#title-block-header .title {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  color: #fff;
+}
 
 h1 {
   margin-top: 2.5rem;
   padding-bottom: 0.4rem;
-  border-bottom: 3px solid #267a78;
-  color: #194f50;
+  border-bottom: 3px solid var(--dl-groen1);
+  color: var(--dl-blauw1);
 }
 
 h2 {
   margin-top: 2rem;
-  color: #194f50;
+  color: var(--dl-blauw1);
 }
 
 h3,
 h4 {
-  color: #49545d;
+  color: var(--dl-blauw2);
 }
 
 a {
-  color: #176b70;
+  color: var(--dl-blauw2);
+}
+
+a:hover {
+  color: var(--dl-blauw1);
+}
+
+/* Inhoudsopgave en tabbladen */
+#TOC .nav-link.active,
+#TOC a.active {
+  border-left-color: var(--dl-groen1) !important;
+  color: var(--dl-blauw2) !important;
+}
+
+.panel-tabset .nav-tabs .nav-link {
+  color: var(--dl-tekst-licht);
+}
+
+.panel-tabset .nav-tabs .nav-link.active {
+  border-top: 3px solid var(--dl-groen1);
+  color: var(--dl-blauw1);
+  font-weight: 600;
 }
 
 /* Tabellen */
@@ -29,55 +87,66 @@ table.dataTable {
 
 .table thead th,
 table.dataTable thead th {
-  border-bottom: 2px solid #267a78 !important;
-  color: #194f50;
+  border-bottom: 2px solid var(--dl-blauw1) !important;
+  color: var(--dl-blauw1);
   vertical-align: bottom;
 }
 
 .table tbody tr:nth-of-type(odd),
 table.dataTable.stripe tbody tr.odd,
 table.dataTable.display tbody tr.odd {
-  background-color: #f8fafb;
+  background-color: var(--dl-grijs1);
 }
 
 .dataTables_wrapper .dataTables_filter input,
 .dataTables_wrapper .dataTables_length select {
-  border: 1px solid #dce4e8;
+  border: 1px solid var(--dl-grijs2);
   border-radius: 0.35rem;
 }
 
 .dataTables_wrapper .dataTables_paginate .paginate_button.current,
 .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
-  border: 1px solid #267a78 !important;
-  background: #267a78 !important;
+  border: 1px solid var(--dl-blauw2) !important;
+  background: var(--dl-blauw2) !important;
   color: #fff !important;
 }
 
 .quarto-float-caption,
 figcaption {
-  color: #58666e;
+  color: var(--dl-tekst-licht);
 }
 
-.callout {
-  border-left-color: #267a78 !important;
+.callout,
+.callout.callout-note {
+  border-color: var(--dl-groen2) !important;
+  border-left-color: var(--dl-groen2) !important;
+}
+
+.callout .callout-header,
+.callout .callout-title-container,
+.callout .callout-toggle,
+.callout summary {
+  color: var(--dl-groen2) !important;
+  font-weight: 600;
 }
 
 /* Melding als gegevens ontbreken */
 .geen-gegevens {
   margin: 0.75rem 0 1.5rem;
   padding: 0.75rem 1rem;
-  border-left: 4px solid #d1a13c;
-  background: #fff9e9;
+  border-left: 4px solid var(--dl-academy);
+  background: var(--dl-grijs1);
 }
 
 /* Stofinformatie en normen */
-.stofinfo-kaart {
+.stofinfo-kaart,
+.normen-kaart {
   margin: 0.75rem 0 2rem;
   padding: 1.25rem 1.5rem;
-  border: 1px solid #dce4e8;
+  border: 1px solid var(--dl-grijs2);
   border-radius: 0.6rem;
-  background: #f8fafb;
-  box-shadow: 0 2px 8px rgb(21 48 58 / 6%);
+  background: var(--dl-grijs1);
+  box-shadow: 0 2px 8px rgb(8 12 128 / 6%);
 }
 
 .stofinfo-kop {
@@ -88,18 +157,18 @@ figcaption {
   gap: 0.5rem 1.5rem;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #dce4e8;
+  border-bottom: 1px solid var(--dl-grijs2);
 }
 
 .stofinfo-kop h3 {
   margin: 0;
-  color: #194f50;
+  color: var(--dl-blauw1);
 }
 
 .stofinfo-kop span,
 .stofinfo-kop small,
 .stofinfo-disclaimer {
-  color: #58666e;
+  color: var(--dl-tekst-licht);
 }
 
 .stofinfo-velden {
@@ -111,7 +180,7 @@ figcaption {
 
 .stofinfo-velden dt {
   margin-bottom: 0.15rem;
-  color: #58666e;
+  color: var(--dl-tekst-licht);
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -131,7 +200,7 @@ figcaption {
 }
 
 .stofinfo-omvat summary {
-  color: #176b70;
+  color: var(--dl-blauw2);
   cursor: pointer;
   font-weight: 600;
 }
@@ -160,7 +229,7 @@ figcaption {
 
 .stofinfo-structuur figcaption {
   margin-top: 0.35rem;
-  color: #58666e;
+  color: var(--dl-tekst-licht);
   font-size: 0.85rem;
 }
 
@@ -179,16 +248,16 @@ figcaption {
 .stofinfo-melding {
   margin: 0.75rem 0 1.5rem;
   padding: 0.75rem 1rem;
-  border-left: 4px solid #d1a13c;
-  background: #fff9e9;
+  border-left: 4px solid var(--dl-academy);
+  background: var(--dl-grijs1);
 }
 
 .normen-compartiment {
   display: block;
   margin-top: 1.25rem;
   padding: 0.6rem 0;
-  border-bottom: 2px solid #267a78;
-  color: #194f50;
+  border-bottom: 2px solid var(--dl-groen1);
+  color: var(--dl-blauw1);
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
@@ -201,7 +270,7 @@ figcaption {
 .normen-subgroep {
   margin-top: 1rem;
   font-size: 1rem;
-  color: #49545d;
+  color: var(--dl-blauw2);
 }
 
 .normen-tabel {

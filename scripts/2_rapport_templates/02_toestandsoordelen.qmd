@@ -1,4 +1,4 @@
-# Toestandsoordelen
+# KRW-toestandsoordelen
 
 ```{r}
 #| label: toestandsoordelen inladen

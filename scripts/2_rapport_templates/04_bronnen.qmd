@@ -49,7 +49,7 @@ p1 <- ggplot(emissie_aandeel_subsector,
     fill = "Subsector",
     title = "Totale emissie"
   ) +
-  theme_minimal()
+  theme_minimal(base_family = rapport_font)
 
 
 # 2. Aandeel emissies
@@ -71,7 +71,7 @@ p2 <- ggplot(emissie_aandeel_subsector,
     fill = "Subsector",
     title = "Relatieve bijdrage subsectoren"
   ) +
-  theme_minimal()
+  theme_minimal(base_family = rapport_font)
 
 
 # combineren met één legenda

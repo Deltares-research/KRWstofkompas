@@ -6,7 +6,9 @@ format:
   html:
     embed-resources: true
     toc: true
-    toc-depth: 2
+    toc-depth: 4
+    number-sections: true
+    number-depth: 4
     css: stofrapport.css
 
 params:
@@ -17,6 +19,10 @@ params:
 execute:
   warning: false
   message: false
+
+  author:
+    name: "Lisa van Eck"
+    affiliation: "Deltares"
 ---
 
 ```{r}

@@ -12,3 +12,9 @@ suppressPackageStartupMessages({
 source(here::here("scripts", "0_algemeen", "paths.R"))
 source(here::here("scripts", "0_algemeen", "functies.R"))
 source(here::here("scripts", "0_algemeen", "rivm_stofgegevens.R"))
+
+# Lettertype van de figuren gelijk aan de rapporttekst (--dl-font in stofrapport.css)
+rapport_font <- "Segoe UI"
+theme_set(theme_gray(base_family = rapport_font))
+# ragg kan systeemlettertypen gebruiken; het standaard png-device op Windows niet
+knitr::opts_chunk$set(dev = "ragg_png")
