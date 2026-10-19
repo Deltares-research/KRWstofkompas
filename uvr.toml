@@ -1,0 +1,9 @@
+[project]
+name = "KRWstofkompas"
+
+[dependencies]
+here = "*"
+httr = "*"
+janitor = "*"
+rvest = "*"
+tidyverse = "*"
