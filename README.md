@@ -40,15 +40,56 @@ scripts/
   3_maak_stofrapporten.R   stap 3: rendert een stofrapport per stof
 ```
 
-### Stap 0 – Packages
+### Stap 0 – Packages met uvr
 
-Alle packages staan in `uvr.toml` en worden geïnstalleerd met [uvr](https://github.com/nbafrank/uvr):
+Dit project gebruikt [uvr](https://github.com/nbafrank/uvr) voor R-packages: één manifest, één lockfile en een eigen packagebibliotheek per project. Iedereen die het project draait, gebruikt daardoor exact dezelfde packageversies.
 
-```
-uvr sync
-```
+| Bestand | Wat | In git? |
+|---|---|---|
+| `uvr.toml` | Manifest: R-versie en de packages die het project direct gebruikt | ja |
+| `uvr.lock` | Lockfile: exacte versies van alle packages, inclusief afhankelijkheden | ja |
+| `.uvr/library/` | Projectbibliotheek waarin de packages geïnstalleerd worden | nee |
+| `.Rprofile` | Gemaakt door uvr; zet `.uvr/library` vooraan in `.libPaths()` bij het starten van R in de projectmap | ja |
 
-Packages worden op één plek geladen in `scripts/0_algemeen/setup.R`; overige packages worden aangeroepen als `pkg::functie()`. Een nieuw package voeg je toe met `uvr add <package>`.
+#### Eerste keer installeren
+
+1. Installeer uvr (eenmalig per computer, geen adminrechten nodig). In PowerShell:
+
+   ```powershell
+   irm https://raw.githubusercontent.com/nbafrank/uvr/main/install.ps1 | iex
+   ```
+
+   uvr komt in `~/.local/bin`. Open daarna een nieuwe terminal en controleer met `uvr --version`.
+
+2. Installeer de packages vanuit de projectmap:
+
+   ```
+   uvr sync
+   ```
+
+   Dit installeert alle packages uit `uvr.lock` als binaries in `.uvr/library` (eerste keer ca. 5 minuten, daarna vrijwel direct vanuit de cache).
+
+3. Controleer in R (gestart vanuit de projectmap) dat de projectbibliotheek actief is. Bij het opstarten verschijnt `uvr: library linked (… packages)` en `.libPaths()[1]` wijst naar `.uvr/library`.
+
+#### Dagelijks gebruik
+
+| Situatie | Commando |
+|---|---|
+| Na een `git pull` waarin `uvr.lock` is gewijzigd | `uvr sync` |
+| Nieuw package nodig | `uvr add <package>` (werkt `uvr.toml` en `uvr.lock` bij en installeert) |
+| Package van GitHub | `uvr add eigenaar/repo` |
+| Package niet meer nodig | `uvr remove <package>` |
+| Packages bijwerken naar nieuwste versies | `uvr update` (of eerst `uvr update --dry-run`) |
+| Overzicht van afhankelijkheden | `uvr tree --depth 1` |
+| Problemen opsporen | `uvr doctor` |
+
+Commit na `uvr add`, `uvr remove` of `uvr update` altijd zowel `uvr.toml` als `uvr.lock`.
+
+#### Afspraken
+
+- Installeer packages niet met `install.packages()`, maar met `uvr add`. Een package dat niet in `uvr.toml` staat, kan nog stilletjes uit je persoonlijke R-bibliotheek geladen worden; het werkt dan bij jou, maar niet bij anderen.
+- Packages die in (bijna) alle scripts nodig zijn, worden geladen in `scripts/0_algemeen/setup.R`. Overige packages roep je aan als `pkg::functie()`, zodat zichtbaar blijft waar ze vandaan komen.
+- De R-versie staat in `uvr.toml` (`r_version`). Wil je die per project vastzetten, gebruik dan `uvr r install <versie>` en `uvr r pin <versie>`; dat schrijft een `.r-version`-bestand.
 
 ### Stap 1 – Data voorbewerken
 
