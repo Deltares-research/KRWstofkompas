@@ -10,7 +10,7 @@ Wat willen we hier dan precies mee? even in het rapport van steven kijken.
 #| output: false
 #| message: false
 #| include: false
-if (!exists("paths")) source(here::here("R", "setup.R"))
+if (!exists("paths")) source(here::here("scripts", "0_algemeen", "setup.R"))
 if (!exists("stof")) stof <- "Cd"
 
 emissies_op_riool <- arrow::read_parquet(nieuwste_bestand(paths$external, "emissies_op_riool"))

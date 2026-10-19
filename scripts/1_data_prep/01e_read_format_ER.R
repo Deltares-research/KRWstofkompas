@@ -1,6 +1,6 @@
 #inladen emissieregistratie data (excel-export van de publieke site) en wegschrijven als parquet
 if (!exists("paths")) {
-  source(here::here("R", "setup.R"))
+  source(here::here("scripts", "0_algemeen", "setup.R"))
 }
 
 map_er <- "P:/emissieregistratie/2_emissieberekeningen/algemene_datafolder/ER1990_2024"

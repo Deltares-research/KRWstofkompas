@@ -25,7 +25,7 @@ execute:
 #| output: false
 #| message: false
 #| include: false
-source(here::here("R", "setup.R"))
+source(here::here("scripts", "0_algemeen", "setup.R"))
 stof <- params$stof
 
 geen_gegevens <- function(kop, tekst) {
@@ -40,7 +40,7 @@ geen_gegevens <- function(kop, tekst) {
 #| echo: false
 #| results: asis
 if (isTRUE(params$heeft_toestand)) {
-  cat(knitr::knit_child(here::here("scripts", "2_rapport", "02_toestandsoordelen.qmd"),
+  cat(knitr::knit_child(here::here("scripts", "2_rapport_templates", "02_toestandsoordelen.qmd"),
                         quiet = TRUE, envir = environment()))
 } else {
   geen_gegevens("Toestandsoordelen",
@@ -53,7 +53,7 @@ if (isTRUE(params$heeft_toestand)) {
 #| echo: false
 #| results: asis
 if (isTRUE(params$heeft_trend)) {
-  cat(knitr::knit_child(here::here("scripts", "2_rapport", "03_trends.qmd"),
+  cat(knitr::knit_child(here::here("scripts", "2_rapport_templates", "03_trends.qmd"),
                         quiet = TRUE, envir = environment()))
 } else {
   geen_gegevens("Trendanalyse",

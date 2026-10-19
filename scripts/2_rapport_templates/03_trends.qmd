@@ -5,7 +5,7 @@
 #| output: false
 #| message: false
 #| include: false
-if (!exists("paths")) source(here::here("R", "setup.R"))
+if (!exists("paths")) source(here::here("scripts", "0_algemeen", "setup.R"))
 
 gis_stroomgebied <- lees_gis("gis_stroomgebied")
 gis_waterlichaam <- lees_gis("gis_waterlichaam")

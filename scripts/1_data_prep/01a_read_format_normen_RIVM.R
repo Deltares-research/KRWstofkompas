@@ -5,7 +5,7 @@
 # het definitieve kolomformaat beschikbaar zijn.
 
 if (!exists("paths")) {
-  source(here::here("R", "setup.R"))
+  source(here::here("scripts", "0_algemeen", "setup.R"))
 }
 
 

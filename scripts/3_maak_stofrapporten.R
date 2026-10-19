@@ -1,5 +1,5 @@
-# Stap 3: maak voor elke stof een stofrapport (scripts/2_rapport/stofrapport.qmd)
-source(here::here("R", "setup.R"))
+# Stap 3: maak voor elke stof een stofrapport (scripts/2_rapport_templates/stofrapport.qmd)
+source(here::here("scripts", "0_algemeen", "setup.R"))
 
 stoffen_toestand <- arrow::read_parquet(
   nieuwste_bestand(paths$external, "toestand_wkp"),
@@ -25,7 +25,7 @@ stoffen <- full_join(
 output_dir <- file.path(paths$output, "stof_rapporten")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-qmd_file <- here::here("scripts", "2_rapport", "stofrapport.qmd")
+qmd_file <- here::here("scripts", "2_rapport_templates", "stofrapport.qmd")
 
 mislukt <- character()
 

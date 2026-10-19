@@ -3,7 +3,8 @@
     "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe"
   ],
   "positron.r.customRootFolders": [
-    "C:\\Users\\wesdorp\\.uvr\\r-versions"
+    "C:\\Users\\wesdorp\\.uvr\\r-versions",
+    "C:\\Users\\eck\\.uvr\\r-versions"
   ],
   "positron.r.interpreters.default": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
   "r.rpath.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",

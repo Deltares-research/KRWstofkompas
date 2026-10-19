@@ -9,6 +9,6 @@ suppressPackageStartupMessages({
   library(knitr)
 })
 
-source(here::here("R", "paths.R"))
-source(here::here("R", "functies.R"))
-source(here::here("R", "rivm_stofgegevens.R"))
+source(here::here("scripts", "0_algemeen", "paths.R"))
+source(here::here("scripts", "0_algemeen", "functies.R"))
+source(here::here("scripts", "0_algemeen", "rivm_stofgegevens.R"))

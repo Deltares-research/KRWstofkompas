@@ -1,6 +1,6 @@
 # inladen GIS data
 if (!exists("paths")) {
-  source(here::here("R", "setup.R"))
+  source(here::here("scripts", "0_algemeen", "setup.R"))
 }
 
 gis_stroomgebied <-
