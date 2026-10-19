@@ -32,19 +32,29 @@ mislukt <- character()
 for (i in seq_len(nrow(stoffen))) {
   stof <- stoffen$stof[i]
   message("Maak rapport voor: ", stof, " (", i, "/", nrow(stoffen), ")")
+  bestandsnaam <- paste0(gsub("[^A-Za-z0-9_.-]", "_", stof), ".html")
 
+  # Quarto kan niet direct naar een andere schijf (P:) renderen; daarom eerst naast de template
   tryCatch(
-    quarto::quarto_render(
-      input = qmd_file,
-      output_file = paste0(gsub("[^A-Za-z0-9_.-]", "_", stof), ".html"),
-      execute_params = list(
-        stof = stof,
-        heeft_toestand = stoffen$heeft_toestand[i],
-        heeft_trend = stoffen$heeft_trend[i]
-      ),
-      quarto_args = c("--output-dir", output_dir),
-      quiet = TRUE
-    ),
+    {
+      quarto::quarto_render(
+        input = qmd_file,
+        output_file = bestandsnaam,
+        execute_params = list(
+          stof = stof,
+          heeft_toestand = stoffen$heeft_toestand[i],
+          heeft_trend = stoffen$heeft_trend[i]
+        ),
+        quiet = TRUE
+      )
+      tijdelijk <- file.path(dirname(qmd_file), bestandsnaam)
+      file.copy(
+        tijdelijk,
+        file.path(output_dir, bestandsnaam),
+        overwrite = TRUE
+      )
+      file.remove(tijdelijk)
+    },
     error = function(e) {
       message("Mislukt voor ", stof, ": ", conditionMessage(e))
       mislukt <<- c(mislukt, stof)
