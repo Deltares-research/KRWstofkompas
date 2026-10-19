@@ -1,6 +1,7 @@
-# Normoverschrijding
+# Toestandsoordelen
+
 ```{r}
-#| label: toetsoordelen inladen
+#| label: toestandsoordelen inladen
 #| echo: false
 #| output: false
 #| message: false
@@ -9,149 +10,330 @@
 source(here::here("scripts", "functies.R"))
 source(here::here("scripts", "paths.R"))
 source(here::here("scripts", "01c_read_gis_data.R"))
-source(here::here("scripts", "01e_read_toetsoordelen_wkp.R"))
 library(tidyverse)
+library(knitr)
 library(sf)
 library(leaflet)
+library(plotly)
+library(DT)
 
 #om een stof te testen moeten we even een stof als voorbeeld nemen
-stof <- "Cd"
+stof <- "As"
+
+
+bestand <- list.files(
+  path = paths$external,
+  pattern = "toestand_wkp.*\\.parquet$",
+  full.names = TRUE
+) |>
+  (\(x) x[which.max(file.info(x)$mtime)])()
+
+toestand_wkp <- arrow::read_parquet(bestand) |> 
+  filter(KRWkwaliteitselementCode == stof)
 ```
 
 ```{r}
-#| label: toetsoordelen samenvatten
-toetsoordelen_stof <- toetsoordelen_wkp |>
-  filter(ParameterCode == stof)
+#| label: toestandsoordelen samenvatten
+#| echo: false
+#| output: false
 
-kwaliteitsoordelen_stof <- toetsoordelen_stof |>
-  group_by(KwaliteitsoordeelCode, KwaliteitsoordeelOmschrijving) |>
-  summarise(aantal_totaal = n(), .groups = "drop")
+toestand_stof <- toestand_wkp |>
+  mutate(
+    Rapportagejaar = suppressWarnings(as.integer(Rapportagejaar)),
+    toetsperiode = str_c(year(as.Date(Begindatum)), "-", year(as.Date(Einddatum))),
+    MonitoringsoortAfkomstCode = if_else(
+      is.na(MonitoringsoortAfkomstCode) | MonitoringsoortAfkomstCode == "",
+      "Onbekend", MonitoringsoortAfkomstCode
+    )
+  )
 
-type_metingen <- toetsoordelen_stof |>
-  filter(KwaliteitsoordeelCode == 0) |>
-  group_by(GrootheidOmschrijving, ClassificatieOmschrijving, EenheidCode,
-           HoedanigheidOmschrijving, HoedanigheidCode,
-           WaardebewerkingsmethodeCode, WaardebepalingsmethodeOmschrijving) |>
-  summarise(aantal_totaal = n(), .groups = "drop")
+if (all(is.na(toestand_stof$Rapportagejaar))) {
+  stop("Er zijn geen geldige waarden gevonden in Rapportagejaar.")
+}
 
-overzicht_toetsoordelen_landelijk <- toetsoordelen_stof |>
-  group_by(GrootheidOmschrijving, ClassificatieOmschrijving, EenheidCode,
-           WaardebewerkingsmethodeCode, WaardebepalingsmethodeOmschrijving) |>
-  summarise(aantal_totaal = n(), .groups = "drop")
+toestand_met_jaar <- toestand_stof |>
+  filter(!is.na(Rapportagejaar))
+meest_recent_rapportagejaar <- max(toestand_met_jaar$Rapportagejaar)
+toestand_recent <- toestand_met_jaar |>
+  filter(Rapportagejaar == meest_recent_rapportagejaar)
+n_zonder_rapportagejaar <- sum(is.na(toestand_stof$Rapportagejaar))
 
-overzicht_toetsoordelen_waterbeheerder <- toetsoordelen_stof |>
-  group_by(WaterbeheerderNaam, GrootheidOmschrijving, ClassificatieOmschrijving) |>
-  summarise(aantal_totaal = n(), .groups = "drop")
+samenvatting_recent <- toestand_recent |>
+  summarise(
+    n_totaal = n(),
+    n_waterlichamen = n_distinct(WaterlichaamCode),
+    n_voldoet_niet = sum(Classificatie == "Voldoet niet", na.rm = TRUE),
+    n_beheerdersoordeel = sum(Beheerdersoordeel == "Ja", na.rm = TRUE),
+    perioden = str_c(sort(unique(toetsperiode)), collapse = " en ")
+  )
 
-hoedanigheden <- toetsoordelen_stof |>
-  distinct(HoedanigheidOmschrijving, HoedanigheidCode)
+overzicht_recent <- toestand_recent |>
+  count(Classificatie, name = "aantal") |>
+  mutate(
+    percentage = 100 * aantal / sum(aantal),
+    aandeel = str_c(
+      format(round(percentage, 1), decimal.mark = ",", nsmall = 1), "%"
+    )
+  ) |>
+  arrange(desc(aantal)) |>
+  select(Classificatie, aantal, aandeel)
 
-n_totaal <- nrow(toetsoordelen_stof)
-n_normaal <- sum(kwaliteitsoordelen_stof$aantal_totaal[kwaliteitsoordelen_stof$KwaliteitsoordeelCode == 0])
-jaren <- range(toetsoordelen_stof$Meetjaar, na.rm = TRUE)
-n_voldoet_niet <- sum(overzicht_toetsoordelen_landelijk$aantal_totaal[
-  overzicht_toetsoordelen_landelijk$ClassificatieOmschrijving == "Voldoet niet"])
+overzicht_herkomst <- toestand_recent |>
+  count(HerkomstBepalendKental, Classificatie, name = "aantal") |>
+  arrange(desc(aantal))
+
+overzicht_per_jaar <- toestand_met_jaar |>
+  count(Rapportagejaar, Classificatie, name = "aantal") |>
+  group_by(Rapportagejaar) |>
+  mutate(
+    totaal = sum(aantal),
+    percentage = 100 * aantal / totaal,
+    aantal_percentage = str_c(
+      format(aantal, big.mark = ".", decimal.mark = ","), " (",
+      format(round(percentage, 1), decimal.mark = ",", nsmall = 1), "%)"
+    ),
+    hover = str_c(
+      "<b>", Classificatie, "</b>: ", aantal, " (",
+      formatC(percentage, format = "f", digits = 1, decimal.mark = ","), "%)",
+      "<br>Totaal ", Rapportagejaar, ": ", totaal
+    )
+  ) |>
+  ungroup()
+
+overzicht_per_jaar_tabel <- overzicht_per_jaar |>
+  select(Rapportagejaar, Classificatie, aantal_percentage) |>
+  pivot_wider(
+    names_from = Classificatie,
+    values_from = aantal_percentage,
+    values_fill = "0 (0,0%)"
+  ) |>
+  left_join(
+    toestand_met_jaar |>
+      count(Rapportagejaar, name = "totaal") |>
+      mutate(Totaal = str_c(
+        format(totaal, big.mark = ".", decimal.mark = ","), " (100,0%)"
+      )) |>
+      select(Rapportagejaar, Totaal),
+    by = "Rapportagejaar"
+  ) |>
+  arrange(Rapportagejaar)
+
+overzicht_waterbeheerder <- toestand_recent |>
+  count(WaterbeheerderNaam, Classificatie, name = "aantal") |>
+  complete(WaterbeheerderNaam, Classificatie, fill = list(aantal = 0)) |>
+  mutate(
+    percentage = 100 * aantal / sum(aantal),
+    cel = str_c(
+      aantal, " (",
+      formatC(percentage, format = "f", digits = 1, decimal.mark = ","), "%)"
+    ),
+    .by = WaterbeheerderNaam
+  ) |>
+  select(WaterbeheerderNaam, Classificatie, cel) |>
+  pivot_wider(names_from = Classificatie, values_from = cel) |>
+  left_join(
+    toestand_recent |>
+      summarise(
+        Totaal = n(),
+        pct_voldoet_niet = 100 * sum(Classificatie == "Voldoet niet", na.rm = TRUE) / n(),
+        .by = WaterbeheerderNaam
+      ),
+    by = "WaterbeheerderNaam"
+  ) |>
+  arrange(desc(pct_voldoet_niet))
+
+voldoet_niet <- toestand_recent |>
+  filter(Classificatie == "Voldoet niet") |>
+  select(WaterbeheerderNaam, WaterlichaamCode, WaterlichaamNaam,
+         MonitoringsoortAfkomstCode, HerkomstBepalendKental, BepalendKental) |>
+  arrange(WaterbeheerderNaam, WaterlichaamCode)
 ```
 
+Dit hoofdstuk beschrijft de toestandsoordelen voor **`r stof`** uit de KRW-toestandsoordelen OW, gedownload van het [Waterkwaliteitsportaal](https://wkp.rws.nl/downloadmodule). Eerst wordt het meest recente rapportagejaar (`r meest_recent_rapportagejaar`) beschreven, daarna de herkomst van de bepalende kentallen en vervolgens de ontwikkeling tussen rapportagejaren.
 
+## Meest recente toestandsoordeel
 
-Dit hoofdstuk geeft een overzicht van de toetsoordelen voor de stof **`r stof`** uit de KRW-toetsing gedownload van het [Waterwaliteitsportaal](https://wkp.rws.nl/downloadmodule). Het beschrijft welke toetsoordelen zijn uitgevoerd, hoe die zijn verdeeld over waterbeheerders en meetjaren, en wat de uitkomst van de toetsing is. In totaal zijn er `r format(n_totaal, big.mark = ".", decimal.mark = ",")` toetsoordelen voor meetjaren `r jaren[1]` t/m `r jaren[2]`.
-
-## Kwaliteit van de toetsoordelen
-
-Tabel 1 toont de kwaliteitsoordelen die bij de toetsoordelen horen. `r n_normaal` van de `r n_totaal` toetsoordelen (`r round(100 * n_normaal / n_totaal, 1)`%) heeft de code 0 (normale waarde). De overige toetsoordelen zijn gevlagd of op onvolledige basis bepaald en moeten met voorzichtigheid worden gebruikt.
+In rapportagejaar **`r meest_recent_rapportagejaar`** zijn er `r format(samenvatting_recent$n_totaal, big.mark = ".", decimal.mark = ",")` toestandsoordelen voor `r format(samenvatting_recent$n_waterlichamen, big.mark = ".", decimal.mark = ",")` waterlichamen. Daarvan voldoen `r format(samenvatting_recent$n_voldoet_niet, big.mark = ".", decimal.mark = ",")` oordelen niet. @tbl-classificatie toont de verdeling naar classificatie.
 
 ```{r}
-#| label: tbl-kwaliteit
-#| tbl-cap: "Aantal toetsoordelen per kwaliteitsoordeel."
-kwaliteitsoordelen_stof |>
-  kable(col.names = c("Code", "Omschrijving", "Aantal"),
-        format.args = list(big.mark = "."))
+#| label: tbl-classificatie
+#| tbl-cap: "Toestandsoordelen per classificatie in het meest recente rapportagejaar."
+#| echo: false
+#| output: true
+#| message: false
+overzicht_recent |>
+  kable(col.names = c("Classificatie", "Aantal", "Aandeel"),
+        format.args = list(big.mark = ".", decimal.mark = ","))
 ```
 
-## Type metingen
+`r if (n_zonder_rapportagejaar > 0) paste0(format(n_zonder_rapportagejaar, big.mark = ".", decimal.mark = ","), " rijen zonder rapportagejaar zijn buiten deze overzichten gelaten.")`
 
-Tabel 2 geeft weer welke typen metingen aan de toetsoordelen met een normale waarde ten grondslag liggen: per grootheid, eenheid, hoedanigheid, waardebewerking (JGM = jaargemiddelde, MAX = maximum) en waardebepalingsmethode. Tabel 3 geeft de bijbehorende hoedanigheden.
+## Hoe is het oordeel bepaald?
+De herkomst beschrijft hoe het bepalende kental is vastgesteld, bijvoorbeeld als gemiddelde (JGM-BLM), maximum (MAX) of als niet gemonitord. De classificatie is de uitkomst van het oordeel; een bepalend kental is niet voor elk oordeel beschikbaar. Voor het laatste rapportagejaar is de herkomst van het bepalende kental per classificatie samengevat in @tbl-herkomst.
+```{r}
+#| label: tbl-herkomst
+#| tbl-cap: "Herkomst van het bepalende kental per classificatie in het meest recente rapportagejaar."
+#| echo: false
+#| output: true
+#| message: false
+overzicht_herkomst |>
+  kable(col.names = c("Herkomst bepalend kental", "Classificatie", "Aantal"),
+        format.args = list(big.mark = ".", decimal.mark = ","))
+```
+
+## Toestandsoordelen over de tijd
+
+@fig-toestandoordeel-tijd en @tbl-toestandoordeel-tijd tonen de aantallen en aandelen per classificatie voor elk beschikbaar rapportagejaar. De vergelijking is gebaseerd op de kolom `Rapportagejaar`; de toetsperiode is hiervoor niet gebruikt.
 
 ```{r}
-#| label: tbl-type-metingen
-type_metingen |>
-  kable(caption = "Tabel 2. Typen metingen (alleen kwaliteitsoordeel 0).",
-        format.args = list(big.mark = "."))
+#| label: fig-toestandoordeel-tijd
+#| fig-cap: "Toestandsoordelen per rapportagejaar en classificatie"
+#| fig-height: 4
+#| echo: false
+#| output: true
+#| message: false
+p_tijd <- overzicht_per_jaar |>
+  ggplot(aes(x = factor(Rapportagejaar), y = aantal, fill = Classificatie,
+             text = hover)) +
+  geom_col(position = "stack") +
+  scale_fill_manual(values = c("Voldoet niet" = "#FF0000",
+                               "Voldoet" = "#00B0F0",
+                               "Niet beoordeeld" = "grey70",
+                               "Niet toetsbaar" = "grey70",
+                               "Niet van toepassing" = "grey70")) +
+  labs(x = "Rapportagejaar", y = "Aantal toestandsoordelen", fill = "Classificatie")
+
+ggplotly(p_tijd, tooltip = "text") |>
+  layout(legend = list(orientation = "h", x = 0, y = -0.2))
 ```
+
+::: {.callout-note collapse="true" title="Bekijk toestandsoordelen per rapportagejaar" appearance="minimal" icon="false"}
 
 ```{r}
-#| label: tbl-hoedanigheden
-hoedanigheden |>
-  kable(caption = "Tabel 3. Voorkomende hoedanigheden.")
+#| label: tbl-toestandoordeel-tijd
+#| tbl-cap: "Aantal toestandsoordelen en aandeel per rapportagejaar en classificatie."
+#| echo: false
+#| output: true
+#| message: false
+overzicht_per_jaar_tabel |>
+  kable(col.names = c("Rapportagejaar", names(overzicht_per_jaar_tabel)[-1]),
+        format.args = list(decimal.mark = ","))
 ```
-
-## Landelijk overzicht van de toetsoordelen
-
-Tabel 4 vat de toetsoordelen landelijk samen per grootheid, klassificatie, eenheid en waardebewerking. Hierin is te zien welke toetsingen zijn gedaan en hoe vaak de uitkomst "Voldoet", "Voldoet niet" of "Niet toetsbaar" is. In totaal hebben `r n_voldoet_niet` toetsoordelen de uitkomst "Voldoet niet".
-
-```{r}
-#| label: tbl-landelijk
-overzicht_toetsoordelen_landelijk |>
-  kable(caption = "Tabel 4. Landelijk overzicht van toetsoordelen.",
-        format.args = list(big.mark = "."))
-```
-
-Figuur 1 laat dezelfde klassificatie zien over de tijd (meetjaar), per waardebewerkingsmethode en grootheid.
-
-```{r}
-#| label: fig-landelijk
-#| fig-cap: "Figuur 1. Aantal toetsoordelen per meetjaar, naar klassificatie."
-#| fig-height: 6
-toetsoordelen_stof |>
-  count(Meetjaar, GrootheidOmschrijving, WaardebewerkingsmethodeCode,
-        ClassificatieOmschrijving) |>
-  ggplot(aes(x = factor(Meetjaar), y = n, fill = ClassificatieOmschrijving)) +
-  geom_col() +
-  facet_grid(GrootheidOmschrijving ~ WaardebewerkingsmethodeCode, scales = "free_y") +
-  scale_x_discrete(breaks = \(x) x[as.integer(x) %% 2 == 0]) +
-  labs(x = "Meetjaar", y = "Aantal toetsoordelen", fill = "Klassificatie") +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, vjust = 0.5))
-```
+:::
 
 ## Overzicht per waterbeheerder
 
-Tabel 5 toont het aantal toetsoordelen per waterbeheerder, grootheid en klassificatie, en maakt zichtbaar waar toetsingen zijn uitgevoerd en waar normen worden overschreden.
+Tabel 4 toont voor rapportagejaar `r meest_recent_rapportagejaar` het aantal oordelen per waterbeheerder en classificatie.
 
 ```{r}
 #| label: tbl-waterbeheerder
-overzicht_toetsoordelen_waterbeheerder |>
-  kable(caption = "Tabel 5. Toetsoordelen per waterbeheerder.",
-        format.args = list(big.mark = "."))
+#| tbl-cap: "Toestandsoordelen per waterbeheerder."
+#| output: true
+#| message: false
+#| echo: false
+kolommen <- names(overzicht_waterbeheerder)
+idx_pct <- which(kolommen == "pct_voldoet_niet") - 1
+kolom_defs <- list(list(targets = idx_pct, visible = FALSE))
+# Sorteren op de tekstcel "aantal (%)" gaat alfabetisch; gebruik daarom het verborgen percentage
+if ("Voldoet niet" %in% kolommen) {
+  kolom_defs <- c(kolom_defs, list(list(
+    targets = which(kolommen == "Voldoet niet") - 1, orderData = idx_pct
+  )))
+}
+
+overzicht_waterbeheerder |>
+  datatable(
+    rownames = FALSE,
+    colnames = c("Waterbeheerder", kolommen[-1]),
+    options = list(
+      order = list(list(idx_pct, "desc")),
+      columnDefs = kolom_defs,
+      pageLength = 25,
+      scrollX = TRUE
+    )
+  )
 ```
 
-## Meetobjecten die niet voldoen
+## Waterlichamen die niet voldoen
 
-```{r}
-#| label: voldoet-niet-data
-voldoet_niet <- toetsoordelen_stof |>
-  filter(ClassificatieOmschrijving == "Voldoet niet") |>
-  group_by(WaterbeheerderNaam, MeetobjectCode, GrootheidOmschrijving,
-           WaardebewerkingsmethodeCode) |>
-  summarise(
-    aantal = n(),
-    meetjaren = str_c(sort(unique(Meetjaar)), collapse = ", "),
-    .groups = "drop"
-  ) |>
-  arrange(WaterbeheerderNaam, desc(aantal))
-```
-
-In Tabel 6 staan de meetobjecten waarvoor minstens één toetsoordeel "Voldoet niet" is. Het gaat om `r sum(voldoet_niet$aantal)` toetsoordelen op `r n_distinct(voldoet_niet$MeetobjectCode)` meetobjecten bij `r n_distinct(voldoet_niet$WaterbeheerderNaam)` waterbeheerders. De meetobjectcodes in de WKP-download zijn niet te koppelen aan de waterlichaamcodes in de GIS-laag, waardoor hier geen kaart wordt getoond.
+Tabel 5 geeft de `r nrow(voldoet_niet)` oordelen met de uitkomst "Voldoet niet" in rapportagejaar `r meest_recent_rapportagejaar`, met de monitoringsoort, herkomst en waarde van het bepalende kental.
 
 ```{r}
 #| label: tbl-voldoet-niet
+#| tbl-cap: "Waterlichamen met toestandsoordeel 'Voldoet niet'."
+#| output: true
+#| message: false
+#| echo: false
 voldoet_niet |>
-  kable(caption = "Tabel 6. Meetobjecten met toetsoordeel 'Voldoet niet'.",
-        col.names = c("Waterbeheerder", "Meetobject", "Grootheid", "Bewerking",
-                      "Aantal", "Meetjaren"))
+  datatable(
+    rownames = FALSE,
+    colnames = c("Waterbeheerder", "Code", "Waterlichaam",
+                 "Afkomst", "Herkomst kental", "Kental"),
+    options = list(pageLength = 20, scrollX = TRUE)
+  )
 ```
 
-## Conclusie
+## Kaart van waterlichamen die niet voldoen
 
-De toetsoordelen voor `r stof` zijn gebaseerd op de in Tabel 2 en 4 genoemde combinaties van grootheid en waardebewerking. De verdeling over klassificaties (Tabel 4, Figuur 1) geeft aan in welke mate de norm wordt gehaald; de verschillen tussen waterbeheerders staan in Tabel 5. Let op dat een deel van de toetsoordelen betrekking heeft op de normfractie en een deel op de concentratie, en dat aantallen toetsoordelen geen aantallen waterlichamen zijn.
+```{r}
+#| label: kaart-data
+#| echo: false
+#| output: false
+# Per waterlichaam de classificatie voor het meest recente rapportagejaar.
+kaart_data <- gis_waterlichaam |>
+  inner_join(
+    toestand_recent |>
+      group_by(WaterlichaamCode) |>
+      summarise(
+        Classificatie = case_when(
+          any(Classificatie == "Voldoet niet", na.rm = TRUE) ~ "Voldoet niet",
+          all(Classificatie == "Voldoet", na.rm = TRUE) &&
+            any(!is.na(Classificatie)) ~ "Voldoet",
+          TRUE ~ "Overig"
+        ),
+        Herkomst = str_c(unique(HerkomstBepalendKental), collapse = "; "),
+        Kental = str_c(unique(BepalendKental), collapse = "; "),
+        .groups = "drop"
+      ),
+    by = c("owl_code" = "WaterlichaamCode")
+  ) |>
+  st_transform(4326)
+
+n_niet_gekoppeld <- n_distinct(toestand_recent$WaterlichaamCode) -
+  n_distinct(kaart_data$owl_code)
+```
+
+De toestandsoordelen van rapportagejaar `r meest_recent_rapportagejaar` zijn weergegeven in @fig-kaart Figuur 2 toont `r n_distinct(kaart_data$owl_code)` gekoppelde waterlichamen: rood voldoet niet, blauw voldoet en grijs omvat overige of gemengde uitkomsten. `r n_niet_gekoppeld` waterlichamen uit de toestandsoordelen hebben geen geometrie in de GIS-laag en ontbreken op de kaart. 
+
+```{r}
+#| label: fig-kaart
+#| fig-cap: "Toestandsoordelen per waterlichaam in het meest recente rapportagejaar."
+#| fig-height: 6
+#| echo: false
+#| output: true
+#| message: false
+library(leaflet)
+pal <- colorFactor(
+  c("firebrick", "#00B0F0", "grey70"),
+  levels = c("Voldoet niet", "Voldoet", "Overig")
+)
+
+kaart_data |>
+  # Waterlichamen die niet voldoen bovenop overige uitkomsten tekenen
+  arrange(desc(Classificatie)) |>
+  leaflet() |>
+  addTiles(
+    urlTemplate = paste0(
+      "https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
+      "?key=", "cb1_4cy6_1_fd3aba0a11049e97db7d991c"
+    ),
+    attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  ) |>
+  addPolygons(
+    color = ~pal(Classificatie), weight = 2, fillOpacity = 0.6,
+    label = ~str_c(owl_naam, " (", owl_code, ")"),
+    popup = ~str_c("<b>", owl_naam, "</b><br>", Classificatie,
+                   "<br>Herkomst: ", Herkomst, "<br>Kental: ", Kental)
+  ) |>
+  addLegend(pal = pal, values = ~Classificatie, title = "Klassificatie")
+```
