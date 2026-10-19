@@ -1,4 +1,6 @@
 /.quarto/
 **/*.quarto_ipynb
 
-/.quarto/
+# gegenereerde rapportbestanden
+*_files/
+*.rmarkdown

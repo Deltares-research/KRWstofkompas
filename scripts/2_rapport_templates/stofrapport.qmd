@@ -1,0 +1,62 @@
+---
+title: "Stofrapport: `r params$stof`"
+lang: nl
+
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    css: stofrapport.css
+
+params:
+  stof: "As"
+  heeft_toestand: true
+  heeft_trend: true
+
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: selecteer stof
+#| echo: false
+#| output: false
+#| message: false
+#| include: false
+source(here::here("R", "setup.R"))
+stof <- params$stof
+
+geen_gegevens <- function(kop, tekst) {
+  cat("# ", kop, "\n\n<div class=\"geen-gegevens\">", tekst, "</div>\n\n", sep = "")
+}
+```
+
+{{< include 01_stofinformatie.qmd >}}
+
+```{r}
+#| label: sectie-toestandsoordelen
+#| echo: false
+#| results: asis
+if (isTRUE(params$heeft_toestand)) {
+  cat(knitr::knit_child(here::here("scripts", "2_rapport", "02_toestandsoordelen.qmd"),
+                        quiet = TRUE, envir = environment()))
+} else {
+  geen_gegevens("Toestandsoordelen",
+                paste0("Er zijn geen toestandsoordelen beschikbaar voor ", stof, "."))
+}
+```
+
+```{r}
+#| label: sectie-trends
+#| echo: false
+#| results: asis
+if (isTRUE(params$heeft_trend)) {
+  cat(knitr::knit_child(here::here("scripts", "2_rapport", "03_trends.qmd"),
+                        quiet = TRUE, envir = environment()))
+} else {
+  geen_gegevens("Trendanalyse",
+                paste0("Er zijn geen trendgegevens uit CHEMtrend beschikbaar voor ", stof, "."))
+}
+```

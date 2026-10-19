@@ -1,0 +1,242 @@
+```{r}
+#| label: rivm-normen-inladen
+#| echo: false
+#| include: false
+
+if (!exists("paths")) source(here::here("R", "setup.R"))
+
+# Voorbeeldstof voor los renderen; in het stofrapport komt stof uit params
+if (!exists("stof")) stof <- "PFOS"
+
+if (!exists("stof", inherits = TRUE) || length(stof) != 1L || is.na(stof) || !nzchar(stof)) {
+  stop("Geef een stofcode door via de parameter 'stof' van het bovenliggende rapport.")
+}
+
+stof_code <- as.character(stof)
+normen_stof <- arrow::open_dataset(nieuwste_bestand(paths$external, "normen_rivm")) |>
+  dplyr::filter(aquo_code == stof_code) |>
+  dplyr::collect() |>
+  dplyr::arrange(norm, compartiment, norm_code, waarde)
+
+rivm_info <- NULL
+if (nrow(normen_stof) > 0L) {
+  stofnaam_rivm_zoek <- unique(stats::na.omit(normen_stof$stofnaam))[1]
+  casnummer_rivm_zoek <- unique(stats::na.omit(normen_stof$cas_nummer))[1]
+  if (is.na(casnummer_rivm_zoek)) casnummer_rivm_zoek <- ""
+  rivm_info <- rivm_stofgegevens(stofnaam_rivm_zoek, casnummer_rivm_zoek)
+} else {
+  rivm_info <- NULL
+}
+```
+
+## Stofinformatie voor `r stof`
+
+```{r}
+#| label: rivm-stofgegevens-blok
+#| echo: false
+#| results: asis
+
+if (is.null(rivm_info)) {
+  cat('<div class="stofinfo-melding">Geen stofgegevens gevonden voor deze stofcode in het normenbestand.</div>\n')
+} else if (!rivm_info$success) {
+  cat('<div class="stofinfo-melding">',
+      htmltools::htmlEscape(rivm_info$message),
+      ' <a href="https://rvszoeksysteem.rivm.nl/Stof" target="_blank" rel="noopener">Zoek de stof op bij RIVM</a>.</div>\n',
+      sep = "")
+} else {
+  cat('<section class="stofinfo-kaart" aria-label="Stofgegevens van RIVM">\n')
+  cat('<div class="stofinfo-kop"><div><h3>',
+      htmltools::htmlEscape(rivm_info$naam),
+      '</h3><span>RIVM-stofgegevens</span></div><small>Bron: <a href="',
+      htmltools::htmlEscape(rivm_info$url, attribute = TRUE),
+      '" target="_blank" rel="noopener">RIVM Zoeksysteem</a> · geraadpleegd op ',
+      format(Sys.Date(), "%d-%m-%Y"),
+      '</small></div>\n', sep = "")
+
+  cat('<dl class="stofinfo-velden">\n')
+  for (veldnaam in names(rivm_info$velden)) {
+    if (identical(.rivm_norm_text(veldnaam), .rivm_norm_text("Structuurformule"))) next
+
+    veldwaarden <- rivm_info$velden[[veldnaam]]$values
+    if (length(veldwaarden) == 0L) next
+
+    cat('<div><dt>', htmltools::htmlEscape(veldnaam), '</dt><dd>')
+    if (identical(.rivm_norm_text(veldnaam), .rivm_norm_text("Functionele stofgroepen"))) {
+      cat('<ul class="stofinfo-groepen">')
+      for (veldwaarde in veldwaarden) {
+        cat('<li>', htmltools::htmlEscape(veldwaarde$text), '</li>')
+      }
+      cat('</ul>')
+    } else if (identical(.rivm_norm_text(veldnaam), .rivm_norm_text("Omvat"))) {
+      cat('<details class="stofinfo-omvat"><summary>Toon ', length(veldwaarden), ' opgenomen stoffen</summary>')
+      cat('<ul class="stofinfo-groepen">')
+      for (veldwaarde in veldwaarden) {
+        cat('<li>', htmltools::htmlEscape(veldwaarde$text), '</li>')
+      }
+      cat('</ul></details>')
+    } else {
+      for (i in seq_along(veldwaarden)) {
+        veldwaarde <- veldwaarden[[i]]
+        if (i > 1L) cat('<br>')
+        links <- veldwaarde$links
+        if (length(links) == 0L) {
+          cat(htmltools::htmlEscape(veldwaarde$text))
+        } else {
+          link_tekst <- vapply(links, `[[`, character(1), "text")
+          link_urls <- vapply(links, `[[`, character(1), "url")
+          cat(htmltools::htmlEscape(veldwaarde$text))
+          for (j in seq_along(links)) {
+            cat(' <a href="', htmltools::htmlEscape(link_urls[[j]], attribute = TRUE),
+                '" target="_blank" rel="noopener">',
+                htmltools::htmlEscape(link_tekst[[j]]), '</a>', sep = "")
+          }
+        }
+      }
+    }
+    cat('</dd></div>\n')
+  }
+  cat('</dl>\n')
+
+  cat('<div class="stofinfo-structuur"><strong>Structuurformule</strong>')
+  if (nzchar(rivm_info$structuur_uri)) {
+    cat('<figure><img src="',
+        htmltools::htmlEscape(rivm_info$structuur_uri, attribute = TRUE),
+        '" alt="Structuurformule van ',
+        htmltools::htmlEscape(rivm_info$naam, attribute = TRUE),
+        '" loading="lazy"><figcaption>Structuurformule</figcaption></figure>\n',
+        sep = "")
+  } else {
+    cat('<p class="stofinfo-structuur-ontbreekt">Structuurformule niet beschikbaar bij RIVM.</p>')
+  }
+  cat('</div>\n')
+
+  cat('<div class="stofinfo-links">')
+  if (nzchar(rivm_info$echa_url)) {
+    cat('<a href="', htmltools::htmlEscape(rivm_info$echa_url, attribute = TRUE),
+        '" target="_blank" rel="noopener">ECHA-stofinformatie</a>', sep = "")
+  }
+  if (nzchar(rivm_info$zzs_url)) {
+    cat('<a href="', htmltools::htmlEscape(rivm_info$zzs_url, attribute = TRUE),
+        '" target="_blank" rel="noopener">ZZS similarity tool</a>', sep = "")
+  }
+  cat('</div>\n')
+  if (nzchar(rivm_info$echa_url)) {
+    cat('<p class="stofinfo-disclaimer">ECHA-informatie is afkomstig van registranten en is niet noodzakelijk door de overheid gevalideerd.</p>\n')
+  }
+  cat('</section>\n')
+}
+```
+
+```{r}
+#| label: rivm-normen-tabel
+#| echo: false
+#| results: asis
+
+if (nrow(normen_stof) == 0L) {
+  cat("**Er zijn geen RIVM-normen gevonden voor deze stofcode.**\n")
+} else {
+  compartimenten_aanwezig <- unique(normen_stof$compartiment)
+  voorkeursvolgorde <- c(
+    "Oppervlaktewater zoet",
+    "Oppervlaktewater zout",
+    "Oppervlaktewater voor drinkwaterbereiding",
+    "Grondwater",
+    "Grond",
+    "Sediment"
+  )
+  compartimenten <- c(
+    voorkeursvolgorde[voorkeursvolgorde %in% compartimenten_aanwezig],
+    sort(setdiff(stats::na.omit(compartimenten_aanwezig), voorkeursvolgorde))
+  )
+  if (anyNA(compartimenten_aanwezig)) {
+    compartimenten <- c(compartimenten, NA_character_)
+  }
+
+  for (compartiment_naam in compartimenten) {
+    normen_compartiment <- if (is.na(compartiment_naam)) {
+      normen_stof |>
+        dplyr::filter(is.na(compartiment))
+    } else {
+      normen_stof |>
+        dplyr::filter(compartiment == compartiment_naam)
+    }
+
+    compartiment_label <- if (is.na(compartiment_naam)) {
+      "Onbekend compartiment"
+    } else {
+      compartiment_naam
+    }
+    details_open <- compartiment_naam %in% c(
+      "Oppervlaktewater zoet",
+      "Oppervlaktewater zout"
+    )
+    open_attribuut <- if (details_open) " open" else ""
+
+    cat('<details class="normen-compartiment-blok"', open_attribuut, '>\n', sep = "")
+    cat('<summary class="normen-compartiment">',
+        htmltools::htmlEscape(compartiment_label),
+        '</summary>\n', sep = "")
+
+    subgroepen <- unique(normen_compartiment$compartimentsubgroep_code)
+    for (subgroep in subgroepen) {
+      normen_subgroep <- if (is.na(subgroep)) {
+        normen_compartiment |>
+          dplyr::filter(is.na(compartimentsubgroep_code))
+      } else {
+        normen_compartiment |>
+          dplyr::filter(compartimentsubgroep_code == subgroep)
+      }
+
+      if (!is.na(subgroep)) {
+        cat('<h4 class="normen-subgroep">',
+            htmltools::htmlEscape(subgroep),
+            '</h4>\n', sep = "")
+      }
+
+      normen_tabel <- normen_subgroep |>
+        dplyr::transmute(
+          `Norm / omschrijving` = norm,
+          Normcode = norm_code,
+          Grenswaarde = trimws(formatC(
+            waarde,
+            format = "fg",
+            digits = 8,
+            big.mark = ".",
+            decimal.mark = ","
+          )),
+          Eenheid = eenheid,
+          Meetkenmerken = purrr::pmap_chr(
+            list(grootheid_code, hoedanigheid_omschrijving, waardebewerkingsmethode_code),
+            function(grootheid, hoedanigheid, methode) {
+              kenmerken <- c(
+                if (!is.na(grootheid) && nzchar(grootheid)) paste0("Grootheid: ", grootheid),
+                if (!is.na(hoedanigheid) && nzchar(hoedanigheid)) paste0("Hoedanigheid: ", hoedanigheid),
+                if (!is.na(methode) && nzchar(methode)) paste0("Bewerking: ", methode)
+              )
+              if (length(kenmerken) == 0L) "—" else paste(kenmerken, collapse = "; ")
+            }
+          )
+        ) |>
+        dplyr::mutate(
+          dplyr::across(
+            c(`Norm / omschrijving`, Normcode, Grenswaarde, Eenheid),
+            ~ tidyr::replace_na(.x, "—")
+          )
+        )
+
+      cat('<div class="table-responsive">\n')
+      cat(knitr::kable(
+        normen_tabel,
+        format = "html",
+        escape = TRUE,
+        table.attr = 'class="table table-striped table-hover table-sm normen-tabel"'
+      ))
+      cat("\n</div>\n")
+    }
+
+    cat("</details>\n")
+  }
+}
+```
+
+
