@@ -13,13 +13,25 @@ stoffen_trend <- arrow::read_parquet(
 ) |>
   distinct(stof = parameter_code)
 
+er_stofcodes <- c(
+  arrow::read_parquet(nieuwste_bestand(paths$external, "emissies_op_riool"), col_select = "Stofcode")$Stofcode,
+  arrow::read_parquet(nieuwste_bestand(paths$external, "emissies_op_water"), col_select = "Stofcode")$Stofcode
+)
+
+stoffen_emissie <- arrow::read_parquet(
+  nieuwste_bestand(paths$external, "rekenfactoren_er_cleaned")
+) |>
+  filter(gepresenteerde_stof_code %in% er_stofcodes) |>
+  distinct(stof = aquo_code)
+
 stoffen <- full_join(
   stoffen_toestand |> mutate(heeft_toestand = TRUE),
   stoffen_trend |> mutate(heeft_trend = TRUE),
   by = "stof"
 ) |>
+  left_join(stoffen_emissie |> mutate(heeft_emissie = TRUE), by = "stof") |>
   filter(!is.na(stof), stof != "") |>
-  mutate(across(c(heeft_toestand, heeft_trend), \(x) coalesce(x, FALSE))) |>
+  mutate(across(c(heeft_toestand, heeft_trend, heeft_emissie), \(x) coalesce(x, FALSE))) |>
   arrange(stof)
 
 output_dir <- file.path(paths$output, "stof_rapporten")
@@ -43,7 +55,8 @@ for (i in seq_len(nrow(stoffen))) {
         execute_params = list(
           stof = stof,
           heeft_toestand = stoffen$heeft_toestand[i],
-          heeft_trend = stoffen$heeft_trend[i]
+          heeft_trend = stoffen$heeft_trend[i],
+          heeft_emissie = stoffen$heeft_emissie[i]
         ),
         quiet = TRUE
       )
