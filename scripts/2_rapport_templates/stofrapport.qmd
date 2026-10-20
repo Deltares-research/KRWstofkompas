@@ -15,6 +15,7 @@ params:
   stof: "As"
   heeft_toestand: true
   heeft_trend: true
+  heeft_emissie: true
 
 execute:
   warning: false
@@ -64,5 +65,18 @@ if (isTRUE(params$heeft_trend)) {
 } else {
   geen_gegevens("Trendanalyse",
                 paste0("Er zijn geen trendgegevens uit CHEMtrend beschikbaar voor ", stof, "."))
+}
+```
+
+```{r}
+#| label: sectie-bronnen
+#| echo: false
+#| results: asis
+if (isTRUE(params$heeft_emissie)) {
+  cat(knitr::knit_child(here::here("scripts", "2_rapport_templates", "04_bronnen.qmd"),
+                        quiet = TRUE, envir = environment()))
+} else {
+  geen_gegevens("Bronnenanalyse",
+                paste0("Er zijn geen emissies in de Emissieregistratie beschikbaar voor ", stof, "."))
 }
 ```
