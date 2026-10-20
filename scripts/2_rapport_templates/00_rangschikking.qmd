@@ -1,0 +1,93 @@
+---
+title: "Stoffenoverzicht"
+---
+
+```{r}
+#| label: stoffenboek-indicatoren-inladen
+#| include: false
+boek_context <- readRDS("boekcontext.rds")
+indicatoren <- readRDS("downloads/stofindicatoren.rds")
+hoofdstukken <- boek_context$stoffen
+indicatoren <- indicatoren[match(hoofdstukken$stof, indicatoren$stof), , drop = FALSE]
+```
+
+Dit overzicht is **alfabetisch op stofcode** geordend, niet op prioriteit. Zoek een
+stof, sorteer een indicator of open het bijbehorende stofhoofdstuk. Er is geen
+samengestelde prioriteitsscore: daarvoor zijn nog geen gewichten of beslisregels
+vastgesteld.
+
+[Download alle indicatoren (CSV)](downloads/stofindicatoren.csv){download="stofindicatoren.csv"}
+· [Download indicatoren voor R (RDS)](downloads/stofindicatoren.rds){download="stofindicatoren.rds"}
+
+```{r}
+#| label: stoffenboek-sorteerbare-indicatoren
+#| echo: false
+kolommen <- c(
+  "stof", "stofnaam", "cas_nummer", "toestand_jaar", "toestand_n_oordelen",
+  "toestand_n_waterlichamen", "toestand_n_voldoet_niet", "toestand_pct_voldoet_niet",
+  "trend_landelijk", "trend_meetpunt_n_trend", "trend_meetpunt_percentage_stijgend",
+  "trend_meetpunt_percentage_dalend", "emissie_jaar", "emissie_riool_totaal",
+  "emissie_riool_eenheid", "emissie_riool_top_sector", "emissie_riool_top_sector_pct",
+  "emissie_water_totaal", "emissie_water_eenheid", "emissie_water_top_sector",
+  "emissie_water_top_sector_pct"
+)
+ontbreekt <- setdiff(kolommen, names(indicatoren))
+if (length(ontbreekt)) stop("Ontbrekende indicatorvelden: ", paste(ontbreekt, collapse = ", "))
+tabel <- as.data.frame(indicatoren[, kolommen])
+urls <- sub("\\.qmd$", ".html", hoofdstukken$hoofdstuk)
+maak_link <- function(tekst, url) {
+  if (is.na(tekst)) return(NA_character_)
+  paste0('<a href="', htmltools::htmlEscape(url, attribute = TRUE), '">',
+         htmltools::htmlEscape(tekst), '</a>')
+}
+tabel$stof <- mapply(maak_link, tabel$stof, urls, USE.NAMES = FALSE)
+tabel$stofnaam <- mapply(maak_link, tabel$stofnaam, urls, USE.NAMES = FALSE)
+namen <- c(
+  "Stofcode", "Stofnaam", "CAS-nummer", "Toestand: jaar", "Toestand: oordelen (n)",
+  "Toestand: waterlichamen (n)", "Voldoet niet: oordelen (n)", "Voldoet niet: oordelen (%)",
+  "Landelijke trend", "Meetpunten met geldige trend (n)", "Meetpunten stijgend (%)",
+  "Meetpunten dalend (%)", "Emissie: jaar", "Riool: totaal", "Riool: eenheid",
+  "Riool: grootste sector", "Riool: grootste sector (%)", "Water: totaal", "Water: eenheid",
+  "Water: grootste sector", "Water: grootste sector (%)"
+)
+widget <- DT::datatable(
+  tabel, rownames = FALSE, colnames = namen, escape = setdiff(seq_along(tabel), 1:2),
+  extensions = "Buttons",
+  options = list(
+    # De generator bepaalt de alfabetische startvolgorde zonder score.
+    order = list(), pageLength = 25, scrollX = TRUE, dom = "Bfrtip",
+    buttons = list(list(extend = "colvis", text = "Kies kolommen")),
+    columnDefs = list(list(targets = "_all", defaultContent = "—")),
+    language = list(search = "Zoeken:", zeroRecords = "Geen stoffen gevonden",
+                    info = "_START_–_END_ van _TOTAL_ stoffen",
+                    paginate = list(previous = "Vorige", "next" = "Volgende"))
+  )
+)
+percentages <- grep("pct|percentage", names(tabel), value = TRUE)
+DT::formatRound(widget, columns = percentages, digits = 1, mark = ".", dec.mark = ",")
+```
+
+## Interpretatie en dekking
+
+- **Toestand:** aantallen zijn toestandsoordelen in het laatste geldige
+  rapportagejaar per stof. Het percentage dat niet voldoet heeft **alle oordelen**
+  als noemer, inclusief niet-toetsbare en overige classificaties. Het is dus geen
+  percentage waterlichamen; het aantal unieke waterlichamen staat apart.
+- **Trends:** de meetpuntpercentages hebben de meetpunten met een geldige
+  trenduitkomst als noemer, inclusief geen significante trend. Meetpunten met te
+  weinig metingen tellen niet mee. GIS-locaties zonder bronwaarneming vormen geen
+  extra trendwaarnemingen.
+- **Emissies:** riool en oppervlaktewater blijven afzonderlijk; optellen kan
+  dubbeltelling geven. De getoonde totalen en sectoraandelen horen bij het laatste
+  gezamenlijke ER-jaar per stof. Een compartiment zonder gegevens in dat jaar
+  krijgt geen vervangend ouder totaal. Onverenigbare eenheden worden niet
+  opgeteld. Bekijk de download en het stofhoofdstuk voor kwaliteitsinformatie.
+- **Ontbrekend is niet nul:** een lege cel of streepje betekent ontbrekend of
+  niet berekenbaar. Nul betekent een daadwerkelijk waargenomen nul.
+- **Vergelijkbaarheid:** bronjaren kunnen per stof en indicator verschillen.
+  Emissiemassa alleen is geen maat voor gevaar, blootstelling of KRW-prioriteit.
+  Controleer eenheden en dekking voordat stoffen worden vergeleken.
+
+De volledige, onopgemaakte indicatoren en bijbehorende metadata/detailbestanden
+zijn beschikbaar in de downloadmap van dit boek. De stofhoofdstukken hergebruiken
+dezelfde rapportonderdelen en dezelfde vastgezette invoerbestanden.

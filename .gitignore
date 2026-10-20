@@ -57,3 +57,6 @@ rsconnect/
 !.pixi/config.toml
 /.uvr/library/
 /.uvr/activate*
+# Gegenereerde Quarto-boeken en lokale proefruns
+/_stoffenboek/
+*.docx
