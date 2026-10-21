@@ -6,6 +6,7 @@
 #| message: false
 #| include: false
 if (!exists("paths")) source(here::here("scripts", "0_algemeen", "setup.R"))
+if (!exists("vat_trends_samen")) source(here::here("scripts", "0_algemeen", "stofindicatoren.R"))
 
 gis_stroomgebied <- lees_gis("gis_stroomgebied")
 gis_waterlichaam <- lees_gis("gis_waterlichaam")
@@ -24,24 +25,14 @@ chemtrend_meetpunten <- arrow::read_parquet(
   file.path(paths$raw, "chemtrend/chemtrend_parquet_all/location_points.parquet")
 )
 
-
-# chemtrend_landelijk_lowess <- arrow::open_dataset(
-#   nieuwste_bestand(paths$interim, "chemtrend_lowess_landelijk")
-# ) |>
-#   filter(parameter_code == stof) |>
-#   collect()
-
-# chemtrend_lowline_meetpunt <- arrow::open_dataset(
-#   nieuwste_bestand(paths$interim, "chemtrend_lowline_meetpunt")
-# ) |>
-#   filter(parameter_code == stof) |>
-#   collect()
-
-chemtrend_trend_info <- arrow::open_dataset(
+chemtrend_bron_info <- arrow::open_dataset(
   nieuwste_bestand(paths$external, "chemtrend_trend_samenvatting_info_data")
 ) |>
   filter(parameter_code == stof) |>
-  collect() |>
+  collect()
+
+# Bronregels bepalen de aantallen; volledige GIS-joins dienen alleen de kaarten.
+chemtrend_trend_info <- chemtrend_bron_info |>
   full_join(
     gis_stroomgebied |>
       select(NAAM, geometry_stroomgebied = geometry) |> 
@@ -74,7 +65,7 @@ chemtrend_trend_info <- arrow::open_dataset(
       aggregatieniveau == "Meetpunt" ~ geometry_meetpunt
     ),
     trend_conclusie = coalesce(
-      trend_conclusie,
+      recode(trend_conclusie, "Geen trend" = "Geen significante trend"),
       "Te weinig metingen voor een trend"
     )
   ) |>
@@ -101,32 +92,43 @@ In de trendanalyse wordt er gekeken naar de trend van de stof gebaseerd op de da
 #| message: false
 #| include: false
 
-overzicht_trend <- chemtrend_trend_info |>
-  group_by(aggregatieniveau) |>
-  summarise(
-    aantal_totaal = n(),
-    aantal_trend = sum(trend_conclusie != "Te weinig metingen voor een trend", na.rm = TRUE),
-    aantal_dalend = sum(trend_conclusie == "Dalende trend", na.rm = TRUE),
-    aantal_stijgend = sum(trend_conclusie == "Stijgende trend", na.rm = TRUE),
-    aantal_geen = sum(trend_conclusie == "Geen trend", na.rm = TRUE),
-    aantal_onvoldoende = sum(trend_conclusie == "Te weinig metingen voor een trend", na.rm = TRUE),
-    .groups = "drop"
+overzicht_trend <- vat_trends_samen(chemtrend_bron_info) |>
+  select(
+    aggregatieniveau, aantal_totaal, aantal_trend, aantal_dalend,
+    aantal_stijgend, aantal_geen, aantal_onvoldoende,
+    percentage_stijgend, percentage_dalend, percentage_geen
   ) |>
   mutate(
     aggregatieniveau = factor(
       aggregatieniveau,
       levels = c("Landelijk", "Stroomgebied", "Waterlichaam", "Meetpunt")
     ),
-    percentage_stijgend = round(aantal_stijgend / aantal_trend * 100, 1),
-    percentage_dalend = round(aantal_dalend / aantal_trend* 100, 1),
-    percentage_geen = round(aantal_geen / aantal_trend * 100, 1),
+    across(starts_with("percentage_"), ~ round(.x, 1))
   ) |>
   arrange(aggregatieniveau)
 
-richting_landelijk <- case_when(
-  overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Landelijk"] == 1 ~ "neerwaarts",
-  overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Landelijk"] == 1 ~ "opwaarts",
-  overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Landelijk"] == 1 ~ "niet significant"
+landelijke_uitkomsten <- chemtrend_bron_info |>
+  filter(aggregatieniveau == "Landelijk") |>
+  transmute(trend_conclusie = recode(
+    trend_conclusie, "Geen trend" = "Geen significante trend"
+  )) |>
+  distinct() |>
+  pull(trend_conclusie)
+
+landelijk_conclusie <- if (length(landelijke_uitkomsten) == 1L &&
+                          !is.na(landelijke_uitkomsten)) {
+  landelijke_uitkomsten
+} else if (length(landelijke_uitkomsten) > 1L) {
+  "Meerdere landelijke uitkomsten"
+} else {
+  "Geen landelijke trend beschikbaar"
+}
+richting_landelijk <- recode(
+  landelijk_conclusie,
+  "Dalende trend" = "neerwaarts",
+  "Stijgende trend" = "opwaarts",
+  "Geen significante trend" = "niet significant",
+  .default = landelijk_conclusie
 )
 
 ```
@@ -170,7 +172,7 @@ Op regionaal niveau zijn verschillen zichtbaar tussen de stroomgebieden. Van de 
 
 Voor de onderliggende waterlichamen zijn er **`r overzicht_trend$aantal_totaal[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen waarvoor een trendberekening gedaan kon worden. Hierbij wordt in **`r overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen een neerwaartse trend gevonden, in **`r overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen een opwaartse trend en in **`r overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Waterlichaam"]`** waterlichamen geen significante trend.
 
-Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @tbl-chemtrend-tabel-overzicht. 
+Een overzicht van de trendresultaten per aggregatieniveau is weergegeven in @tbl-chemtrend-tabel-overzicht. De aantallen tellen CHEMtrend-bronregels vóór koppeling aan GIS, inclusief eventuele herhaalde regio's. De kaarten tonen daarnaast de GIS-dekking; gebieden zonder bronresultaat worden als onvoldoende metingen weergegeven. Percentages zijn berekend over geldige trenduitkomsten; bij nul geldige uitkomsten is het percentage niet beschikbaar.
 
 ```{r}
 #| label: tbl-chemtrend-tabel-overzicht

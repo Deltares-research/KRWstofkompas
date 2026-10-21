@@ -16,6 +16,8 @@ params:
   heeft_toestand: true
   heeft_trend: true
   heeft_emissie: true
+  indicatoren_bestand: null
+  bronbestanden: null
 
 execute:
   warning: false
@@ -34,11 +36,14 @@ execute:
 #| include: false
 source(here::here("scripts", "0_algemeen", "setup.R"))
 stof <- params$stof
+stofindicatoren <- lees_stofindicatoren(stof, params$indicatoren_bestand, params$bronbestanden)
 
 geen_gegevens <- function(kop, tekst) {
   cat("# ", kop, "\n\n<div class=\"geen-gegevens\">", tekst, "</div>\n\n", sep = "")
 }
 ```
+
+{{< include 00_samenvatting.qmd >}}
 
 {{< include 01_stofinformatie.qmd >}}
 
@@ -46,7 +51,7 @@ geen_gegevens <- function(kop, tekst) {
 #| label: sectie-toestandsoordelen
 #| echo: false
 #| results: asis
-if (isTRUE(params$heeft_toestand)) {
+if (isTRUE(params$heeft_toestand) && !is.na(stofindicatoren$toestand_jaar)) {
   cat(knitr::knit_child(here::here("scripts", "2_rapport_templates", "02_toestandsoordelen.qmd"),
                         quiet = TRUE, envir = environment()))
 } else {

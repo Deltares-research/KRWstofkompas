@@ -8,6 +8,7 @@ In de bronnenanalyse wordt er gekeken naar de mogelijke bronnen van de stof. Hie
 #| message: false
 #| include: false
 if (!exists("paths")) source(here::here("scripts", "0_algemeen", "setup.R"))
+if (!exists("vat_emissies_samen")) source(here::here("scripts", "0_algemeen", "stofindicatoren.R"))
 if (!exists("stof")) stof <- "Cd"
 
 er_stoffen <- arrow::read_parquet(nieuwste_bestand(paths$external, "rekenfactoren_er_cleaned")) |>
@@ -27,8 +28,37 @@ emissies <- bind_rows(
 )
 
 er_stofnamen <- str_c(unique(emissies$Stof), collapse = ", ")
-eenheid <- str_c(unique(emissies$Eenheid), collapse = ", ")
-meest_recent_jaar <- max(emissies$Jaar)
+if (!nrow(emissies)) er_stofnamen <- "geen geregistreerde stof"
+emissies <- emissies |>
+  mutate(Jaar = suppressWarnings(as.integer(as.character(Jaar))))
+
+# Geen gedeeltelijke sommen of optelling van verschillende eenheden, ook niet
+# in historische figuren. Verschillende compartimenten mogen andere eenheden hebben.
+for (comp in c("riool", "water")) {
+  d <- filter(emissies, compartiment == comp)
+  if (!nrow(d)) next
+    if (any(is.na(d$Eenheid) | !nzchar(trimws(d$Eenheid)) |
+      tolower(trimws(d$Eenheid)) %in% c("onbekend", "unknown", "n/a", "na", "-")) ||
+      n_distinct(d$Eenheid) != 1L) {
+    stop("Emissies naar ", comp, ": onbekende of gemengde eenheden; geen geldige totalen of figuren mogelijk.")
+  }
+  if (any(!is.finite(d$Emissie)) || any(d$Emissie < 0)) {
+    stop("Emissies naar ", comp, ": ontbrekende, niet-eindige of negatieve emissies; geen gedeeltelijke sommen toegestaan.")
+  }
+  if (anyNA(d$Jaar)) {
+    stop("Emissies naar ", comp, ": ontbrekend of ongeldig jaar; geen geldige tijdreeks mogelijk.")
+  }
+}
+emissie_samenvatting <- vat_emissies_samen(emissies)
+meest_recent_jaar <- emissie_samenvatting$emissie_jaar
+emissie_jaar_tekst <- if (is.na(meest_recent_jaar)) "geen beschikbaar jaar" else as.character(meest_recent_jaar)
+
+emissie_indicator <- function(comp, naam) {
+  emissie_samenvatting[[paste0("emissie_", comp, "_", naam)]]
+}
+emissie_eenheid <- function(comp) {
+  indicator_tekst(emissies$Eenheid[emissies$compartiment == comp])
+}
 
 compartiment_naam <- c(riool = "riool", water = "oppervlaktewater")
 
@@ -42,9 +72,10 @@ emissie_per_groep <- function(comp, groep, min_aandeel = 0) {
 
   aandeel_totaal <- d |>
     summarise(Emissie = sum(Emissie), .by = categorie) |>
-    mutate(aandeel = Emissie / sum(Emissie)) |>
+    mutate(aandeel = indicator_pct(Emissie, rep(sum(Emissie), n())) / 100) |>
     arrange(desc(Emissie))
-  klein <- aandeel_totaal$categorie[aandeel_totaal$aandeel < min_aandeel]
+  klein <- aandeel_totaal$categorie[!is.na(aandeel_totaal$aandeel) &
+                                      aandeel_totaal$aandeel < min_aandeel]
   niveaus <- c(setdiff(aandeel_totaal$categorie, klein), if (length(klein) > 0) "Overig")
 
   d |>
@@ -52,7 +83,7 @@ emissie_per_groep <- function(comp, groep, min_aandeel = 0) {
     summarise(Emissie = sum(Emissie), .by = c(Jaar, categorie)) |>
     complete(Jaar, categorie, fill = list(Emissie = 0)) |>
     mutate(
-      Aandeel = Emissie / sum(Emissie) * 100,
+      Aandeel = indicator_pct(Emissie, rep(sum(Emissie), n())),
       categorie = factor(categorie, levels = niveaus),
       .by = Jaar
     )
@@ -79,6 +110,7 @@ geen_emissie <- function(comp) {
 plot_emissie_absoluut <- function(comp, groep, min_aandeel = 0) {
   d <- emissie_per_groep(comp, groep, min_aandeel)
   if (nrow(d) == 0) return(geen_emissie(comp))
+  eenheid <- emissie_eenheid(comp)
   d <- mutate(d, hover = str_c(categorie, "<br>", Jaar, ": ", getal(Emissie), " ", eenheid))
 
   p <- ggplot(d, aes(x = Jaar, y = Emissie, colour = categorie, group = categorie, text = hover)) +
@@ -93,6 +125,9 @@ plot_emissie_absoluut <- function(comp, groep, min_aandeel = 0) {
 plot_emissie_aandeel <- function(comp, groep, min_aandeel = 0) {
   d <- emissie_per_groep(comp, groep, min_aandeel)
   if (nrow(d) == 0) return(geen_emissie(comp))
+  if (all(is.na(d$Aandeel))) {
+    return(htmltools::div(class = "geen-gegevens", "Aandelen zijn niet beschikbaar: de totale emissie is nul."))
+  }
   d <- mutate(d, hover = str_c(categorie, "<br>", Jaar, ": ", round(Aandeel, 1), "%"))
 
   p <- ggplot(d, aes(x = Jaar, y = Aandeel, fill = categorie, text = hover)) +
@@ -104,21 +139,22 @@ plot_emissie_aandeel <- function(comp, groep, min_aandeel = 0) {
 }
 
 tekst_emissie <- function(comp) {
-  d <- emissies |>
-    filter(compartiment == comp, Jaar == meest_recent_jaar)
-  if (nrow(d) == 0) {
+  if (is.na(meest_recent_jaar)) {
+    return(paste0("Er zijn geen emissiegegevens naar ", compartiment_naam[[comp]], " beschikbaar."))
+  }
+  if (emissie_indicator(comp, "n_regels") == 0L) {
     return(paste0("Voor ", meest_recent_jaar, " zijn er geen emissies naar ", compartiment_naam[[comp]], " geregistreerd."))
   }
-  totaal <- sum(d$Emissie)
-  top3 <- d |>
-    summarise(Emissie = sum(Emissie), .by = Sector) |>
-    slice_max(Emissie, n = 3) |>
-    mutate(tekst = str_c(Sector, " (", round(Emissie / totaal * 100), "%)"))
+  totaal <- emissie_indicator(comp, "totaal")
+  top <- emissie_indicator(comp, "top_sector")
+  aandeel <- emissie_indicator(comp, "top_sector_pct")
+  bron_tekst <- if (is.na(top)) "onbekend" else top
+  aandeel_tekst <- if (is.na(aandeel)) "aandeel niet beschikbaar" else paste0(round(aandeel), "% per sector")
 
   paste0(
     "In ", meest_recent_jaar, " was de totale emissie naar ", compartiment_naam[[comp]], " **",
-    getal(totaal), " ", eenheid, "**. De grootste bijdrage komt van ",
-    str_flatten(top3$tekst, collapse = ", ", last = " en "), "."
+    getal(totaal), " ", emissie_indicator(comp, "eenheid"), "**. De grootste bijdrage komt van ",
+    bron_tekst, " (", aandeel_tekst, ")."
   )
 }
 
@@ -126,10 +162,11 @@ tabel_emissieoorzaken <- function(comp) {
   d <- emissies |>
     filter(compartiment == comp, Jaar == meest_recent_jaar)
   if (nrow(d) == 0) return(geen_emissie(comp))
+  eenheid <- emissie_indicator(comp, "eenheid")
 
   d |>
     summarise(Emissie = sum(Emissie), .by = c(Sector, Subsector, Emissieoorzaak)) |>
-    mutate(Aandeel = Emissie / sum(Emissie)) |>
+    mutate(Aandeel = indicator_pct(Emissie, rep(emissie_indicator(comp, "totaal"), n())) / 100) |>
     arrange(desc(Emissie)) |>
     datatable(
       rownames = FALSE,
@@ -145,22 +182,22 @@ De emissies zijn afkomstig uit de Emissieregistratie, voor de ER-stof `r er_stof
 
 ```{r}
 #| label: tbl-emissie-overzicht
-#| tbl-cap: !expr paste0("Totale emissie van ", stof, " in ", meest_recent_jaar, " en de grootste bron per compartiment.")
+#| tbl-cap: !expr paste0("Totale emissie van ", stof, " (", emissie_jaar_tekst, ") en de grootste bron per compartiment.")
 #| echo: false
-emissies |>
-  filter(Jaar == meest_recent_jaar) |>
-  summarise(Emissie = sum(Emissie), .by = c(compartiment, Sector)) |>
-  mutate(totaal = sum(Emissie), .by = compartiment) |>
-  slice_max(Emissie, n = 1, by = compartiment) |>
-  right_join(tibble(compartiment = names(compartiment_naam)), by = "compartiment") |>
-  transmute(
-    Compartiment = str_to_sentence(compartiment_naam[compartiment]),
-    Totaal = if_else(is.na(totaal), "-", getal(totaal)),
-    `Grootste bron (sector)` = if_else(
-      is.na(Sector), "-", str_c(Sector, " (", round(Emissie / totaal * 100), "%)")
+bind_rows(lapply(names(compartiment_naam), function(comp) {
+  totaal <- emissie_indicator(comp, "totaal")
+  top <- emissie_indicator(comp, "top_sector")
+  aandeel <- emissie_indicator(comp, "top_sector_pct")
+  tibble(
+    Compartiment = str_to_sentence(compartiment_naam[[comp]]),
+    Totaal = if (is.na(totaal)) "-" else getal(totaal),
+    Eenheid = if (is.na(emissie_indicator(comp, "eenheid"))) "-" else emissie_indicator(comp, "eenheid"),
+    `Grootste bron (sector)` = if (is.na(top)) "-" else paste0(
+      top, " (", if (is.na(aandeel)) "aandeel niet beschikbaar" else paste0(round(aandeel), "% per sector"), ")"
     )
-  ) |>
-  knitr::kable(col.names = c("Compartiment", paste0("Totale emissie [", eenheid, "]"), "Grootste bron (sector)"))
+  )
+})) |>
+  knitr::kable(col.names = c("Compartiment", "Totale emissie", "Eenheid", "Grootste bron (sector)"))
 ```
 
 ## Emissies naar riool
@@ -245,7 +282,7 @@ plot_emissie_aandeel("water", "Subsector", min_aandeel = 0.01)
 
 ## Emissieoorzaken
 
-Alle emissieoorzaken in `r meest_recent_jaar`, gesorteerd van grote naar kleine emissie.
+Alle emissieoorzaken (`r emissie_jaar_tekst`), gesorteerd van grote naar kleine emissie.
 
 ::: {.callout-note collapse="true" title="Bekijk alle emissieoorzaken" appearance="minimal" icon="false"}
 
@@ -255,7 +292,7 @@ Alle emissieoorzaken in `r meest_recent_jaar`, gesorteerd van grote naar kleine 
 
 ```{r}
 #| label: tbl-emissieoorzaken-riool
-#| tbl-cap: !expr paste0("Emissieoorzaken van ", stof, " naar riool in ", meest_recent_jaar, ".")
+#| tbl-cap: !expr paste0("Emissieoorzaken van ", stof, " naar riool (", emissie_jaar_tekst, ").")
 #| echo: false
 tabel_emissieoorzaken("riool")
 ```
@@ -264,7 +301,7 @@ tabel_emissieoorzaken("riool")
 
 ```{r}
 #| label: tbl-emissieoorzaken-water
-#| tbl-cap: !expr paste0("Emissieoorzaken van ", stof, " naar oppervlaktewater in ", meest_recent_jaar, ".")
+#| tbl-cap: !expr paste0("Emissieoorzaken van ", stof, " naar oppervlaktewater (", emissie_jaar_tekst, ").")
 #| echo: false
 tabel_emissieoorzaken("water")
 ```

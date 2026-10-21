@@ -1,16 +1,20 @@
 {
   "positron.r.customBinaries": [
-    "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe"
+    "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
+    "C:\\Program Files\\R\\R-4.6.1\\bin\\x64\\R.exe"
   ],
   "positron.r.customRootFolders": [
     "C:\\Users\\wesdorp\\.uvr\\r-versions",
     "C:\\Users\\eck\\.uvr\\r-versions"
   ],
-  "positron.r.interpreters.default": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
-  "r.rpath.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe",
+  "positron.r.interpreters.default": "C:\\Program Files\\R\\R-4.6.1\\bin\\x64\\R.exe",
+  "r.rpath.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\x64\\R.exe",
   "r.rterm.option": [
     "run",
     "R"
   ],
-  "r.rterm.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\R.exe"
+  "r.rterm.windows": "C:\\Program Files\\R\\R-4.6.1\\bin\\x64\\R.exe",
+  "chat.tools.terminal.autoApprove": {
+    "quarto": true
+  }
 }

@@ -12,6 +12,9 @@ suppressPackageStartupMessages({
 source(here::here("scripts", "0_algemeen", "paths.R"))
 source(here::here("scripts", "0_algemeen", "functies.R"))
 source(here::here("scripts", "0_algemeen", "rivm_stofgegevens.R"))
+source(here::here("scripts", "0_algemeen", "stofindicatoren.R"))
+source(here::here("scripts", "0_algemeen", "prioritering.R"))
+source(here::here("scripts", "0_algemeen", "stoffenboek.R"))
 source(here::here("scripts", "0_algemeen", "get_chemtrend_data.R"))
 source(here::here("scripts", "0_algemeen", "chemtrend_plots.R"))
 
