@@ -161,143 +161,28 @@ arrow::write_parquet(
   )
 )
 
-# 4. Landelijke trendfiguur: lowess-lijnen (tijdreeks) -------------------------
-# Zelfde berekening als 04B_aggregate_trends_landelijk_vanaf_2009.R in CHEMtrend:
-# - lowline per meetpunt (grijze lijnen)
-# - landelijke lowess over alle meetpunten (p0, rode lijn)
-# - lowess over de punten boven/onder p0 (p75/p25, rode stippellijnen)
-groep <- c("parameter_code", "eenheid_code", "hoedanigheid_code", "compartiment_code")
+#locatie specifieke en landelijke trenddata ophalen direct vanuit de database en exporteren naar parquet bestanden
 
-df_lows <-
-  arrow::open_dataset(
-    file.path(
-      map_chemtrend,
-      "bewerkt",
-      "03B_data_trend_ats_info_vanaf_2009.parquet"
-    )
-  ) |>
-  select(
-    meetpunt_code_nieuw,
-    all_of(groep),
-    datum,
-    datum_num,
-    lowline_x,
-    lowline_y
-  ) |>
-  collect()
+if (!exists("paths")) {
+  source(here::here("scripts", "0_algemeen", "setup.R"))
+}
 
-par_nest <-
-  df_lows %>%
-  nest(
-    .by = c(
-      parameter_code,
-      eenheid_code,
-      hoedanigheid_code,
-      compartiment_code
-    )
-  )
+library(DBI)
+library(RPostgres)
 
-# voeg lowess toe #
-par_nest <-
-  par_nest |>
-  mutate(
-    lowess_par = map(
-      data,
-      ~ as_tibble(
-        lowess(.x$datum_num, .x$lowline_y, f = 2 / 3, delta = 0)
-      )
-    )
-  )
-
-# unnest de data uit het model #
-par_unnested <- par_nest |>
-  unnest(lowess_par) |>
-  select(-data) |>
-  mutate(datum = as_date(x), p = '0') |>
-  arrange(parameter_code, x)
-
-# model voor percentielen 25 en 75 #
-df_lows <-
-  left_join(
-    df_lows,
-    distinct(par_unnested, across(all_of(groep)), datum, lowess_par_y = y),
-    by = c(groep, "datum")
-  ) |>
-  mutate(
-    low_p = case_when(
-      lowline_y > lowess_par_y ~ 75,
-      lowline_y < lowess_par_y ~ 25
-    )
-  )
-
-# filter data voor de 25 & 75 percentiel lijn #
-lowess_p_75 <- filter(df_lows, low_p == 75) |>
-  nest(
-    .by = c(
-      parameter_code,
-      eenheid_code,
-      hoedanigheid_code,
-      compartiment_code
-    )
-  ) |>
-  mutate(
-    lowess_mod = map(
-      data,
-      ~ as_tibble(lowess(
-        .x$lowline_x,
-        .x$lowline_y,
-        f = 2 / 3,
-        delta = 0
-      ))
-    )
-  ) |>
-  select(-data) |>
-  unnest(lowess_mod) |>
-  mutate(datum = as_date(x), p = '75') |>
-  ungroup()
-
-lowess_p_25 <- filter(df_lows, low_p == 25) |>
-  nest(
-    .by = c(
-      parameter_code,
-      eenheid_code,
-      hoedanigheid_code,
-      compartiment_code
-    )
-  ) |>
-  mutate(
-    lowess_mod = map(
-      data,
-      ~ as_tibble(lowess(
-        .x$lowline_x,
-        .x$lowline_y,
-        f = 2 / 3,
-        delta = 0
-      ))
-    )
-  ) |>
-  select(-data) |>
-  unnest(lowess_mod) |>
-  mutate(datum = as_date(x), p = '25') |>
-  ungroup()
-
-
-# combineer de  verschillende lowess lijnen #
-trends_par <- bind_rows(par_unnested, lowess_p_25, lowess_p_75) |>
-  select(all_of(groep), datum, p, y)
-
-arrow::write_parquet(
-  trends_par,
-  file.path(
-    paths$interim,
-    paste0("chemtrend_lowess_landelijk_", settings$run_date, ".parquet")
-  )
+con <- dbConnect(
+  Postgres(),
+  host = "c-oet33628.directory.intra",
+  port = 5432,
+  dbname = "waterkwaliteit",
+  user = "eck",
+  password = rstudioapi::askForPassword("PostgreSQL password")
 )
 
-arrow::write_parquet(
-  df_lows |> distinct(meetpunt_code_nieuw, parameter_code, eenheid_code, datum, lowline_y),
-  file.path(
-    paths$interim,
-    paste0("chemtrend_lowline_meetpunt_", settings$run_date, ".parquet")
-  )
+# pass con into the function
+export_all_chemtrend_parquet(
+  con = con,
+  out_dir = file.path(paths$raw, "chemtrend/chemtrend_parquet_all")
 )
+
+DBI::dbDisconnect(con)

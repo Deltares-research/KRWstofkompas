@@ -13,20 +13,29 @@ gis_waterlichaam <- lees_gis("gis_waterlichaam")
 # Voorbeeldstof voor los renderen; in het stofrapport komt stof uit params
 if (!exists("stof")) stof <- "Cd"
 
-chemtrend_meetpunten <- arrow::read_parquet(
-  nieuwste_bestand(paths$interim, "chemtrend_meetpunten")
-)
-chemtrend_landelijk_lowess <- arrow::open_dataset(
-  nieuwste_bestand(paths$interim, "chemtrend_lowess_landelijk")
-) |>
-  filter(parameter_code == stof) |>
-  collect()
+ds <- open_chemtrend_dataset(file.path(paths$raw, "chemtrend/chemtrend_parquet_all"))
 
-chemtrend_lowline_meetpunt <- arrow::open_dataset(
-  nieuwste_bestand(paths$interim, "chemtrend_lowline_meetpunt")
-) |>
-  filter(parameter_code == stof) |>
-  collect()
+chemtrend_data <- get_substance_data_by_code(ds, substance_code = stof, trend_period = 1)
+
+rm(ds)
+
+
+chemtrend_meetpunten <- arrow::read_parquet(
+  file.path(paths$raw, "chemtrend/chemtrend_parquet_all/location_points.parquet")
+)
+
+
+# chemtrend_landelijk_lowess <- arrow::open_dataset(
+#   nieuwste_bestand(paths$interim, "chemtrend_lowess_landelijk")
+# ) |>
+#   filter(parameter_code == stof) |>
+#   collect()
+
+# chemtrend_lowline_meetpunt <- arrow::open_dataset(
+#   nieuwste_bestand(paths$interim, "chemtrend_lowline_meetpunt")
+# ) |>
+#   filter(parameter_code == stof) |>
+#   collect()
 
 chemtrend_trend_info <- arrow::open_dataset(
   nieuwste_bestand(paths$external, "chemtrend_trend_samenvatting_info_data")
@@ -48,12 +57,12 @@ chemtrend_trend_info <- arrow::open_dataset(
   full_join(
     chemtrend_meetpunten |>
       mutate(aggregatieniveau = "Meetpunt"),
-    by = c("regio_omschrijving" = "meetpunt_code_nieuw", "aggregatieniveau" = "aggregatieniveau")
+    by = c("regio_omschrijving" = "location_code", "aggregatieniveau" = "aggregatieniveau")
   ) |>
      mutate(
     geometry_meetpunt = purrr::map2(
-      x_rd,
-      y_rd,
+      x,
+      y,
       \(x, y) sf::st_point(c(x, y))
     ) |>
       sf::st_sfc(crs = 28992)
@@ -78,8 +87,8 @@ chemtrend_trend_info <- arrow::open_dataset(
     -geometry_stroomgebied,
     -geometry_waterlichaam,
     -geometry_meetpunt,
-    -x_rd,
-    -y_rd
+    -x,
+    -y
   )
 ```
 
@@ -131,54 +140,30 @@ De landelijke trend voor **`r stof`** is **`r richting_landelijk`** (zie @fig-la
 #| output: true
 #| message: false
 
-lowess_stof <- chemtrend_landelijk_lowess |>
-  mutate(
-    lijn = recode(p, "0" = "Landelijke lowess", "25" = "25e percentiel", "75" = "75e percentiel"),
-    hover = str_c(lijn, "<br>", format(datum, "%d-%m-%Y"), ": ", signif(y, 3))
+p_nl <- plot_chemtrend_region_by_code(
+  regions_data = chemtrend_data$regions,
+  substance_code = stof,
+  region_id = 4,
+  trend_period = 1,
+  show_locations = TRUE
+)
+
+p_nl <- ggplotly(p_nl, tooltip = "text")
+
+# Legenda-labels aanpassen
+p_nl$x$data[[1]]$name <- "Dalende trend"
+p_nl$x$data[[2]]$name <- "Geen significante trend"
+p_nl$x$data[[3]]$name <- "Stijgende trend"
+p_nl$x$data[[4]]$name <- "P25"
+p_nl$x$data[[5]]$name <- "Mediaan"
+p_nl$x$data[[6]]$name <- "P75"
+
+p_nl <- p_nl |>
+  layout(
+    legend = list(orientation = "h")
   )
 
-eenheid <- str_c(unique(lowess_stof$eenheid_code), collapse = ", ")
-
-landelijk_conclusie <- chemtrend_trend_info |>
-  filter(aggregatieniveau == "Landelijk") |>
-  pull(trend_conclusie) |>
-  first(default = "Te weinig metingen voor een trend")
-landelijk_kleur <- unname(trend_kleur[landelijk_conclusie])
-
-meetpunt_lijnen <- chemtrend_lowline_meetpunt |>
-  mutate(hover = str_c(meetpunt_code_nieuw, "<br>", format(datum, "%d-%m-%Y"), ": ", signif(lowline_y, 3)))
-
-# Zelfde figuur als 04B_aggregate_trends_landelijk_vanaf_2009.R in CHEMtrend
-p_landelijk <- ggplot(meetpunt_lijnen, aes(x = datum, y = lowline_y, text = hover)) +
-  geom_line(
-    aes(group = meetpunt_code_nieuw),
-    col = "grey90",
-    linewidth = 0.2,
-    na.rm = TRUE
-  ) +
-  geom_line(
-    data = filter(lowess_stof, p == "0"),
-    aes(y = y, group = lijn),
-    col = landelijk_kleur,
-    na.rm = TRUE
-  ) +
-  geom_line(
-    data = filter(lowess_stof, p != "0"),
-    aes(y = y, group = lijn),
-    col = landelijk_kleur,
-    linetype = "dashed",
-    na.rm = TRUE
-  ) +
-  coord_cartesian(ylim = c(0, max(lowess_stof$y, na.rm = TRUE) * 1.05)) +
-  labs(x = NULL, y = glue::glue("{stof} [{eenheid}]")) +
-  theme_classic(base_family = rapport_font) +
-  theme(panel.grid.major.y = element_line(
-    colour = "grey90",
-    linewidth = 0.5,
-    linetype = "dotted"
-  ))
-
-ggplotly(p_landelijk, tooltip = "text")
+p_nl
 ```
 
 Op regionaal niveau zijn verschillen zichtbaar tussen de stroomgebieden. Van de **`r overzicht_trend$aantal_totaal[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** onderzochte stroomgebieden laten **`r overzicht_trend$aantal_dalend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** een neerwaartse trend zien, **`r overzicht_trend$aantal_stijgend[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** stroomgebieden tonen een opwaartse trend en **`r overzicht_trend$aantal_geen[overzicht_trend$aggregatieniveau == "Stroomgebied"]`** hebben geen significante trend.
@@ -298,7 +283,7 @@ waterlichaam <- st_transform(waterlichaam, 4326) |>
     trend_kleur = unname(trend_kleur[trend_conclusie])
   )
 
-meetpunt <- st_transform(meetpunt, 4326) |>
+meetpunt <-  st_set_crs(meetpunt, 4326) |>
   mutate(
     trend_kleur = unname(trend_kleur[trend_conclusie])
   )

@@ -12,6 +12,8 @@ suppressPackageStartupMessages({
 source(here::here("scripts", "0_algemeen", "paths.R"))
 source(here::here("scripts", "0_algemeen", "functies.R"))
 source(here::here("scripts", "0_algemeen", "rivm_stofgegevens.R"))
+source(here::here("scripts", "0_algemeen", "get_chemtrend_data.R"))
+source(here::here("scripts", "0_algemeen", "chemtrend_plots.R"))
 
 # Lettertype van de figuren gelijk aan de rapporttekst (--dl-font in stofrapport.css)
 rapport_font <- "Segoe UI"
