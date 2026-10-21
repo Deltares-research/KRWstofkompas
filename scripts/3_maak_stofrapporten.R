@@ -1,38 +1,9 @@
 # Stap 3: maak voor elke stof een stofrapport (scripts/2_rapport_templates/stofrapport.qmd)
 source(here::here("scripts", "0_algemeen", "setup.R"))
 
-stoffen_toestand <- arrow::read_parquet(
-  nieuwste_bestand(paths$external, "toestand_wkp"),
-  col_select = "KRWkwaliteitselementCode"
-) |>
-  distinct(stof = KRWkwaliteitselementCode)
-
-stoffen_trend <- arrow::read_parquet(
-  nieuwste_bestand(paths$external, "chemtrend_trend_samenvatting_info_data"),
-  col_select = "parameter_code"
-) |>
-  distinct(stof = parameter_code)
-
-er_stofcodes <- c(
-  arrow::read_parquet(nieuwste_bestand(paths$external, "emissies_op_riool"), col_select = "Stofcode")$Stofcode,
-  arrow::read_parquet(nieuwste_bestand(paths$external, "emissies_op_water"), col_select = "Stofcode")$Stofcode
-)
-
-stoffen_emissie <- arrow::read_parquet(
-  nieuwste_bestand(paths$external, "rekenfactoren_er_cleaned")
-) |>
-  filter(gepresenteerde_stof_code %in% er_stofcodes) |>
-  distinct(stof = aquo_code)
-
-stoffen <- full_join(
-  stoffen_toestand |> mutate(heeft_toestand = TRUE),
-  stoffen_trend |> mutate(heeft_trend = TRUE),
-  by = "stof"
-) |>
-  left_join(stoffen_emissie |> mutate(heeft_emissie = TRUE), by = "stof") |>
-  filter(!is.na(stof), stof != "") |>
-  mutate(across(c(heeft_toestand, heeft_trend, heeft_emissie), \(x) coalesce(x, FALSE))) |>
-  arrange(stof)
+indicatoren_export <- maak_indicatoren_export(paths)
+stofindicatoren <- indicatoren_export$indicatoren
+stoffen <- indicatoren_export$stoffen
 
 output_dir <- file.path(paths$output, "stof_rapporten")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -49,14 +20,16 @@ for (i in seq_len(nrow(stoffen))) {
   # Quarto kan niet direct naar een andere schijf (P:) renderen; daarom eerst naast de template
   tryCatch(
     {
-      quarto::quarto_render(
+      render_stoffen_quarto(
         input = qmd_file,
         output_file = bestandsnaam,
         execute_params = list(
           stof = stof,
           heeft_toestand = stoffen$heeft_toestand[i],
           heeft_trend = stoffen$heeft_trend[i],
-          heeft_emissie = stoffen$heeft_emissie[i]
+          heeft_emissie = stoffen$heeft_emissie[i],
+          indicatoren_bestand = file.path(indicatoren_export$export_dir, "stofindicatoren.rds"),
+          bronbestanden = indicatoren_export$bestanden
         ),
         quiet = TRUE
       )
@@ -66,7 +39,7 @@ for (i in seq_len(nrow(stoffen))) {
         file.path(output_dir, bestandsnaam),
         overwrite = TRUE
       )
-      file.remove(tijdelijk)
+      # Bewaar de lokale render ook voor inspectie; geen automatische verwijdering.
     },
     error = function(e) {
       message("Mislukt voor ", stof, ": ", conditionMessage(e))

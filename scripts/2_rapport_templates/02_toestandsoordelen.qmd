@@ -7,6 +7,7 @@
 #| message: false
 #| include: false
 if (!exists("paths")) source(here::here("scripts", "0_algemeen", "setup.R"))
+if (!exists("vat_toestand_samen")) source(here::here("scripts", "0_algemeen", "stofindicatoren.R"))
 
 # Voorbeeldstof voor los renderen; in het stofrapport komt stof uit params
 if (!exists("stof")) stof <- "As"
@@ -28,7 +29,7 @@ gis_waterlichaam <- lees_gis("gis_waterlichaam")
 
 toestand_stof <- toestand_wkp |>
   mutate(
-    Rapportagejaar = suppressWarnings(as.integer(Rapportagejaar)),
+    Rapportagejaar = suppressWarnings(as.integer(as.character(Rapportagejaar))),
     toetsperiode = str_c(year(as.Date(Begindatum)), "-", year(as.Date(Einddatum))),
     MonitoringsoortAfkomstCode = if_else(
       is.na(MonitoringsoortAfkomstCode) | MonitoringsoortAfkomstCode == "",
@@ -40,20 +41,21 @@ if (all(is.na(toestand_stof$Rapportagejaar))) {
   stop("Er zijn geen geldige waarden gevonden in Rapportagejaar.")
 }
 
+toestand_samenvatting <- vat_toestand_samen(toestand_stof)
 toestand_met_jaar <- toestand_stof |>
   filter(!is.na(Rapportagejaar))
-meest_recent_rapportagejaar <- max(toestand_met_jaar$Rapportagejaar)
+meest_recent_rapportagejaar <- toestand_samenvatting$toestand_jaar
 toestand_recent <- toestand_met_jaar |>
   filter(Rapportagejaar == meest_recent_rapportagejaar)
-n_zonder_rapportagejaar <- sum(is.na(toestand_stof$Rapportagejaar))
+n_zonder_rapportagejaar <- toestand_samenvatting$toestand_n_zonder_jaar
 
-samenvatting_recent <- toestand_recent |>
-  summarise(
-    n_totaal = n(),
-    n_waterlichamen = n_distinct(WaterlichaamCode),
-    n_voldoet_niet = sum(Classificatie == "Voldoet niet", na.rm = TRUE),
-    n_beheerdersoordeel = sum(Beheerdersoordeel == "Ja", na.rm = TRUE),
-    perioden = str_c(sort(unique(toetsperiode)), collapse = " en ")
+samenvatting_recent <- toestand_samenvatting |>
+  transmute(
+    n_totaal = toestand_n_oordelen,
+    n_waterlichamen = toestand_n_waterlichamen,
+    n_voldoet_niet = toestand_n_voldoet_niet,
+    n_beheerdersoordeel = toestand_n_beheerdersoordeel,
+    perioden = str_c(sort(unique(toestand_recent$toetsperiode)), collapse = " en ")
   )
 
 overzicht_recent <- toestand_recent |>
@@ -250,7 +252,7 @@ kaart_data <- gis_waterlichaam |>
   ) |>
   st_transform(4326)
 
-n_niet_gekoppeld <- n_distinct(toestand_recent$WaterlichaamCode) -
+n_niet_gekoppeld <- samenvatting_recent$n_waterlichamen -
   n_distinct(kaart_data$owl_code)
 ```
 

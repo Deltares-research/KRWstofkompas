@@ -1,0 +1,47 @@
+# Samenvatting
+
+```{r}
+#| label: stof-samenvatting
+#| echo: false
+#| results: asis
+waarde_tekst <- function(x, digits = 1) {
+  if (!length(x) || is.na(x)) return("niet beschikbaar")
+  format(round(x, digits), big.mark = ".", decimal.mark = ",", trim = TRUE)
+}
+veilig <- function(x) htmltools::htmlEscape(ifelse(is.na(x), "niet beschikbaar", as.character(x)))
+s <- stofindicatoren
+toestand_tekst <- if (is.na(s$toestand_jaar)) {
+  "Geen toestandsoordelen met een geldig rapportagejaar beschikbaar."
+} else {
+  paste0("In ", s$toestand_jaar, ": **", waarde_tekst(s$toestand_n_voldoet_niet, 0),
+         " van ", waarde_tekst(s$toestand_n_oordelen, 0), " oordelen voldoen niet (",
+         waarde_tekst(s$toestand_pct_voldoet_niet), "%)**. De oordelen betreffen ",
+         waarde_tekst(s$toestand_n_waterlichamen, 0), " unieke waterlichamen.")
+}
+trend_tekst <- paste0("Landelijk: **", veilig(s$trend_landelijk), "**.")
+if (!is.na(s$trend_meetpunt_n_trend) && s$trend_meetpunt_n_trend > 0) {
+  trend_tekst <- paste0(trend_tekst, " Van ", waarde_tekst(s$trend_meetpunt_n_trend, 0),
+                       " meetpunt-trenduitkomsten met voldoende gegevens is **",
+                       waarde_tekst(s$trend_meetpunt_percentage_stijgend), "% stijgend** en **",
+                       waarde_tekst(s$trend_meetpunt_percentage_dalend), "% dalend**.")
+} else {
+  trend_tekst <- paste0(trend_tekst, " Geen geldige meetpunttrends beschikbaar.")
+}
+emissie_tekst <- vapply(c("riool", "water"), function(comp) {
+  naam <- if (comp == "water") "Oppervlaktewater" else "Riool"
+  prefix <- paste0("emissie_", comp, "_")
+  if (!isTRUE(s[[paste0(prefix, "geldig")]])) {
+    return(paste0(naam, ": geen berekenbaar totaal voor het laatste ER-jaar (ontbrekende gegevens of ongeldige eenheden/waarden)."))
+  }
+  paste0(naam, " (", s$emissie_jaar, "): **",
+         waarde_tekst(s[[paste0(prefix, "totaal")]], 3), " ",
+         veilig(s[[paste0(prefix, "eenheid")]]), "/jaar**. Grootste sector(en): ",
+         veilig(s[[paste0(prefix, "top_sector")]]), " (",
+         waarde_tekst(s[[paste0(prefix, "top_sector_pct")]]), "% per sector bij gedeelde eerste plaats).")
+}, character(1))
+cat(paste0("- **Toestand:** ", toestand_tekst, "\n",
+           "- **Trends:** ", trend_tekst, "\n",
+           "- **Bronnen:** ", paste(emissie_tekst, collapse = " "), "\n\n",
+           "De percentages voor toestand betreffen oordelen, niet waterlichamen. ",
+           "Bronjaren kunnen verschillen; riool en oppervlaktewater mogen niet zonder meer worden opgeteld.\n\n"))
+```
