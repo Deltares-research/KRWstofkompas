@@ -6,5 +6,9 @@ source(file.path(root, "scripts", "0_algemeen", "setup.R"))
 # Testfase: uitsluitend deze vier stoffen. Zet selectie = NULL voor alle stoffen.
 test_stoffen <- c("As", "Cd", "Pb", "PFOS")
 indicatoren_export <- maak_indicatoren_export(paths, selectie = test_stoffen)
+exporteer_projectprioritering(
+	indicatoren_export,
+	projectplan = file.path(root, "projectplan_KRW stoffen 2026.docx")
+)
 stoffenboek <- maak_stoffenboek(paths = paths, root = root, export = indicatoren_export)
 stoffenboek$index

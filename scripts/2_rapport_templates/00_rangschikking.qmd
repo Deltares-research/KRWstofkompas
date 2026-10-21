@@ -11,6 +11,75 @@ hoofdstukken <- boek_context$stoffen
 indicatoren <- indicatoren[match(hoofdstukken$stof, indicatoren$stof), , drop = FALSE]
 ```
 
+## Doel
+
+**KRW Stofkompas** verbindt kennis over KRW-normen, monitoring,
+toestandsbeoordelingen, concentratietrends en emissies. Het ondersteunt een
+transparante, herhaalbare werkwijze om probleemstoffen te signaleren, bronnen en
+routes te duiden en onzekerheden en kennisleemtes zichtbaar te maken. Zo ontstaat
+een basis voor adviezen over Emissieregistratie (ER), monitoring, maatregelen en
+gericht vervolgonderzoek.
+
+Per stof brengt het kompas de toestand, concentratietrends en geregistreerde
+emissies samen in tabellen, kaarten en standaardgrafieken. Het maakt zichtbaar
+welke informatie beschikbaar is en waar aanvullende kennis over bronnen, routes
+en maatregelen nodig is. Deze informatie ondersteunt de afweging welke stoffen
+of regio's als eerste aandacht verdienen. Deltares voert de analyses uit;
+afstemming over producten en prioritering vindt plaats met RWS WVL, namens IenW.
+
+**Deze proefversie bevat uitsluitend As, Cd, Pb en PFOS.** Het betreft een
+methodiekdemonstratie, geen volledig overzicht van alle KRW-stoffen.
+Het uitgangspunt is een landelijk beeld met aandacht voor regionale afwijkingen.
+Nieuwe meetcampagnes en volledige bronopsporing voor alle stoffen vallen niet
+binnen de huidige scope.
+
+## Prioriteringskader
+
+Voor prioritering worden zes criteria onderscheiden: normoverschrijding,
+niet-afnemende trends, ruimtelijke impact, onzekerheid en kennisleemtes,
+beleidsurgentie en handelingsperspectief. Samen verbinden ze de omvang en
+ontwikkeling van een waterkwaliteitsprobleem met de behoefte aan kennis en de
+mogelijkheden om te handelen.
+
+**Numerieke gewichten, scoredrempels en een formule voor een totaalscore zijn nog
+niet vastgesteld.** De beschikbare informatie dekt bovendien nog niet alle
+criteria. Er wordt daarom geen eindrangorde berekend en ook geen gelijke weging
+aangenomen. De tabel laat zien welke informatie al beschikbaar is en welke
+aanvullingen en beslisregels nodig zijn voor een onderbouwde prioritering.
+
+| Criterium | Beschikbaar in deze proefversie | Nog nodig | Gewicht |
+|---|---|---|---|
+| Normoverschrijding | Toestandsbeoordelingen als afzonderlijke context | Frequentie en ernst van overschrijdingen uit meetwaarden en passend normkader | Niet vastgesteld |
+| Trend (niet-afnemend) | CHEMtrend-uitkomsten op meerdere aggregatieniveaus | Beslisregel voor niet-afnemend, beoordeling van dekking en onzekerheid | Niet vastgesteld |
+| Ruimtelijke impact | Kaarten en regionale toestand-/trendgegevens waar beschikbaar | Expliciete impactmaat en gebiedsweging | Niet vastgesteld |
+| Onzekerheid / kennisleemte | Beschikbaarheid van bronnen en expliciete ontbrekende informatie | Volledige leemte-analyse en onzekerheidsduiding | Niet vastgesteld |
+| Beleidsurgentie | Nog geen stofspecifieke beoordeling | Beleidscontext en afstemming met opdrachtgever | Niet vastgesteld |
+| Handelingsperspectief | ER-sectoren en emissieroutes als broncontext | Maatregelenkennis, uitvoerbaarheid en verwachte effecten | Niet vastgesteld |
+
+::: {.callout-warning}
+## Onvolledig is niet laag-prioritair
+
+- We beschikken nu over **toestandsbeoordelingen, niet over berekende
+  normoverschrijdingen**. Het percentage oordelen dat niet voldoet is geen maat
+  voor de frequentie of ernst van overschrijdingen in metingen en vervangt dat
+  criterium niet.
+- Achtergrondrapporten, waaronder *Brononderzoek 6 KRW stoffen* van **Arcadis &
+  Aveco de Bondt**, zijn nog niet geïntegreerd. De geplande bron-, route- en
+  leemte-analyse en het handelingsperspectief zijn dus nog onvolledig.
+- Ontbrekende criteria blijven onbekend: ze krijgen geen nulscore. Er worden
+  geen gewichten herverdeeld over de wel beschikbare criteria.
+- Geen significante trend is geen bewijs dat de concentratie stabiel is.
+  Als eerste richtlijn voor trendanalyse gelden minimaal vier metingen per jaar, minimaal
+  50% boven de rapportagegrens, minimaal vijf jaar data en ten minste één jaar
+  binnen de afgelopen drie jaar. Deze voorwaarden zijn hier **niet opnieuw
+  getoetst**; het boek gebruikt aangeleverde CHEMtrend-uitkomsten.
+:::
+
+[Download prioriteringskader (CSV)](downloads/prioriteringskader.csv)
+· [Onderbouwing en leemtes per stof en criterium (CSV)](downloads/prioritering.csv)
+
+## Stoffen vergelijken
+
 Dit overzicht is **alfabetisch op stofcode** geordend, niet op prioriteit. Zoek een
 stof, sorteer een indicator of open het bijbehorende stofhoofdstuk. Er is geen
 samengestelde prioriteitsscore: daarvoor zijn nog geen gewichten of beslisregels
@@ -45,8 +114,8 @@ tabel$stofnaam <- mapply(maak_link, tabel$stofnaam, urls, USE.NAMES = FALSE)
 namen <- c(
   "Stofcode", "Stofnaam", "CAS-nummer", "Toestand: jaar", "Toestand: oordelen (n)",
   "Toestand: waterlichamen (n)", "Voldoet niet: oordelen (n)", "Voldoet niet: oordelen (%)",
-  "Landelijke trend", "Meetpunten met geldige trend (n)", "Meetpunten stijgend (%)",
-  "Meetpunten dalend (%)", "Emissie: jaar", "Riool: totaal", "Riool: eenheid",
+  "Landelijke trend", "Meetpunt-trenduitkomsten geldig (n)", "Meetpunt-uitkomsten stijgend (%)",
+  "Meetpunt-uitkomsten dalend (%)", "Emissie: jaar", "Riool: totaal", "Riool: eenheid",
   "Riool: grootste sector", "Riool: grootste sector (%)", "Water: totaal", "Water: eenheid",
   "Water: grootste sector", "Water: grootste sector (%)"
 )
@@ -73,8 +142,10 @@ DT::formatRound(widget, columns = percentages, digits = 1, mark = ".", dec.mark 
   rapportagejaar per stof. Het percentage dat niet voldoet heeft **alle oordelen**
   als noemer, inclusief niet-toetsbare en overige classificaties. Het is dus geen
   percentage waterlichamen; het aantal unieke waterlichamen staat apart.
-- **Trends:** de meetpuntpercentages hebben de meetpunten met een geldige
-  trenduitkomst als noemer, inclusief geen significante trend. Meetpunten met te
+- **Trends:** de meetpuntpercentages hebben de bronregels met een geldige
+  meetpunt-trenduitkomst als noemer, inclusief geen significante trend. Deze zijn
+  niet noodzakelijk unieke meetpunten; herhaalde regio's worden in de export
+  gesignaleerd. Uitkomsten met te
   weinig metingen tellen niet mee. GIS-locaties zonder bronwaarneming vormen geen
   extra trendwaarnemingen.
 - **Emissies:** riool en oppervlaktewater blijven afzonderlijk; optellen kan
