@@ -1,0 +1,794 @@
+```{r}
+
+# ==============================================================
+# Zoek en vat Nederlandse rapporten over arseen in water samen
+#
+# Uitvoer:
+#   output/rapporten_arseen.csv
+#   output/rapporten_arseen_samenvatting.md
+#   output/referenties_arseen.bib
+#   output/ruwe_llm_response.json
+#
+# Vereiste omgevingsvariabele:
+#   OPENAI_API_KEY
+# ==============================================================
+
+
+# 1. Packages ---------------------------------------------------
+
+packages <- c(
+  "httr2",
+  "jsonlite",
+  "dplyr",
+  "purrr",
+  "stringr",
+  "tibble",
+  "readr",
+  "glue"
+)
+
+new_packages <- packages[!packages %in% rownames(installed.packages())]
+
+if (length(new_packages) > 0) {
+  install.packages(new_packages)
+}
+
+invisible(lapply(packages, library, character.only = TRUE))
+
+
+# 2. Instellingen ------------------------------------------------
+
+output_dir <- "output"
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+api_key <- Sys.getenv("OPENAI_API_KEY")
+
+if (api_key == "") {
+  stop(
+    paste(
+      "De omgevingsvariabele OPENAI_API_KEY ontbreekt.",
+      "Stel deze bijvoorbeeld eenmalig in via:",
+      'usethis::edit_r_environ()',
+      'en voeg toe: OPENAI_API_KEY="jouw-sleutel"',
+      sep = "\n"
+    )
+  )
+}
+
+# Pas het model aan als binnen jouw account een ander model
+# voor web search beschikbaar is.
+model <- Sys.getenv("OPENAI_MODEL", unset = "gpt-5.5")
+
+openai_endpoint <- "https://api.openai.com/v1/responses"
+
+
+# 3. Afbakening --------------------------------------------------
+
+onderwerp <- paste(
+  "Arseen in Nederlands oppervlaktewater, rioolwater,",
+  "huishoudelijk of industrieel afvalwater, RWZI-influent,",
+  "RWZI-effluent, regenwaterriolen, gemengde riolen,",
+  "riooloverstorten, IBA's en belasting van oppervlaktewater."
+)
+
+organisaties <- c(
+  "Deltares",
+  "STOWA",
+  "RIVM",
+  "Rijkswaterstaat",
+  "KWR Water Research Institute",
+  "Wageningen University & Research",
+  "Wageningen Environmental Research",
+  "TNO",
+  "CBS",
+  "PBL",
+  "KNMI",
+  "Universiteit Utrecht",
+  "TU Delft",
+  "Universiteit van Amsterdam",
+  "Vrije Universiteit Amsterdam",
+  "Radboud Universiteit",
+  "Universiteit Leiden",
+  "Rijksuniversiteit Groningen",
+  "Universiteit Twente",
+  "Waterschap Amstel, Gooi en Vecht",
+  "Hoogheemraadschap Hollands Noorderkwartier",
+  "Hoogheemraadschap van Rijnland",
+  "Hoogheemraadschap van Delfland",
+  "Hoogheemraadschap De Stichtse Rijnlanden",
+  "Waterschap Hollandse Delta",
+  "Waterschap Rivierenland",
+  "Waterschap Vallei en Veluwe",
+  "Waterschap Drents Overijsselse Delta",
+  "Waterschap Vechtstromen",
+  "Waterschap Zuiderzeeland",
+  "Waterschap Brabantse Delta",
+  "Waterschap De Dommel",
+  "Waterschap Aa en Maas",
+  "Waterschap Limburg",
+  "Wetterskip Fryslân",
+  "Waterschap Noorderzijlvest",
+  "Waterschap Hunze en Aa's",
+  "Unie van Waterschappen"
+)
+
+
+# 4. Zoekprompt --------------------------------------------------
+
+organisaties_tekst <- paste(
+  paste0("- ", organisaties),
+  collapse = "\n"
+)
+
+zoekprompt <- glue::glue(
+'
+Voer een systematische Nederlandstalige literatuurverkenning uit naar:
+
+{onderwerp}
+
+Zoek uitsluitend naar inhoudelijke Nederlandse publicaties, waaronder:
+
+- onderzoeksrapporten;
+- technische rapporten;
+- factsheets met onderzoeksmethoden of meetresultaten;
+- overheidsrapporten;
+- waterschapsrapporten;
+- universitaire rapporten;
+- openbare projectrapportages;
+- rapporten over emissiebronnen;
+- rapporten over natuurlijke achtergrondconcentraties;
+- rapporten over uitspoeling, nalevering of mobilisatie naar oppervlaktewater;
+- rapporten over arseen in riolering en afvalwaterzuivering.
+
+Controleer in ieder geval afzonderlijk de volgende organisaties:
+
+{organisaties_tekst}
+
+Gebruik aanvullende zoektermen en synoniemen, waaronder:
+
+- arseen oppervlaktewater;
+- arsenicum oppervlaktewater;
+- arseen afvalwater;
+- arseen riool;
+- arseen riolering;
+- arseen RWZI;
+- arseen effluent;
+- arseen influent;
+- arseen overstort;
+- arseen regenwaterriool;
+- arseen emissie water;
+- arseen belasting oppervlaktewater;
+- arseen waterbodem;
+- arseen uitspoeling;
+- arseen achtergrondconcentratie;
+- As oppervlaktewater;
+- As afvalwater;
+- arsenic surface water Netherlands;
+- arsenic wastewater Netherlands.
+
+Inclusiecriteria:
+
+1. De publicatie moet betrekking hebben op Nederland of op Nederlandse
+   waterbeheerders, datasets, emissies, meetlocaties of watersystemen.
+2. Arseen moet inhoudelijk worden behandeld. Alleen een vermelding in een
+   lange stoffenlijst is onvoldoende, tenzij de publicatie relevante
+   meetgegevens, emissiecijfers, methoden of conclusies voor arseen bevat.
+3. De publicatie moet relevant zijn voor oppervlaktewater of de
+   afvalwaterketen.
+4. Grondwaterrapporten mogen uitsluitend worden opgenomen als ze expliciet
+   relevant zijn voor aanvoer, uitspoeling of transport naar oppervlaktewater.
+5. Drinkwateronderzoek mag uitsluitend worden opgenomen als het ook
+   expliciete informatie bevat over oppervlaktewater, afvalwater of emissies.
+6. Geef de voorkeur aan primaire bronnen en officiële publicatiepagina’s.
+7. Voeg geen resultaat toe wanneer titel, organisatie en URL niet voldoende
+   kunnen worden geverifieerd.
+8. Verzin geen auteurs, jaartallen, rapportnummers, organisaties of URL’s.
+
+Behandel verschillende versies van hetzelfde rapport als één publicatie.
+Gebruik bij voorkeur de definitieve openbare versie.
+
+Lever het antwoord in twee delen.
+
+DEEL 1: GESTRUCTUREERDE INVENTARISATIE
+
+Plaats tussen de markers DATA_START en DATA_END uitsluitend geldige JSON.
+Gebruik exact deze structuur:
+
+{
+  "rapporten": [
+    {
+      "titel": "Volledige titel",
+      "auteurs": ["Auteur 1", "Auteur 2"],
+      "organisatie": "Uitgevende organisatie",
+      "jaar": 2025,
+      "publicatietype": "Rapport",
+      "rapportnummer": "Rapportnummer of lege tekst",
+      "url_publicatiepagina": "URL of lege tekst",
+      "url_document": "URL of lege tekst",
+      "watercompartiment": [
+        "oppervlaktewater",
+        "rioolwater",
+        "RWZI-effluent"
+      ],
+      "relevantie_arseen": "Korte feitelijke toelichting",
+      "belangrijkste_bevindingen": "Feitelijke samenvatting",
+      "zoekstatus": "direct relevant",
+      "primaire_bron": true
+    }
+  ],
+  "niet_gevonden_bij": [
+    {
+      "organisatie": "Naam organisatie",
+      "toelichting": "Wat is doorzocht en wat kon niet worden vastgesteld"
+    }
+  ]
+}
+
+Gebruik voor zoekstatus één van:
+
+- direct relevant;
+- aanvullend relevant;
+- mogelijk relevant, handmatige controle nodig.
+
+DEEL 2: RAPPORT
+
+Plaats tussen de markers REPORT_START en REPORT_END een Nederlandstalig
+Markdown-rapport met:
+
+# Nederlandse rapporten over arseen in oppervlaktewater en de afvalwaterketen
+
+## Zoekmethode en afbakening
+## Hoofdbevindingen
+## Bronnen en emissieroutes
+## Arseen in oppervlaktewater
+## Arseen in rioolwater en RWZI’s
+## Natuurlijke achtergrond en uitspoeling
+## Kennislacunes
+## Overzicht van de gevonden publicaties
+## Referenties
+
+Eisen aan verwijzingen:
+
+- Gebruik in de lopende tekst verwijzingen in de vorm (Organisatie, jaar).
+- Gebruik (Organisatie, jaar, pp. x–y) wanneer paginanummers daadwerkelijk
+  gevonden en gecontroleerd zijn.
+- Neem alleen bronnen op die ook in de inventarisatie staan.
+- Iedere feitelijke conclusie moet met een bron zijn onderbouwd.
+- De referentielijst bevat per bron, voor zover beschikbaar:
+  auteurs, jaar, titel, organisatie, rapportnummer en URL.
+- Gebruik Markdown-links.
+- Markeer onzekerheden expliciet.
+- Zeg duidelijk wanneer geen afzonderlijk rapport van een organisatie is
+  gevonden.
+- Beweer niet dat de lijst volledig is; beschrijf haar als zo compleet
+  mogelijk binnen de geraadpleegde openbare bronnen.
+'
+)
+
+
+# 5. Functie voor OpenAI Responses API ---------------------------
+
+run_web_research <- function(prompt,
+                             model = "gpt-5.5",
+                             api_key = Sys.getenv("OPENAI_API_KEY")) {
+
+  request_body <- list(
+    model = model,
+    tools = list(
+      list(
+        type = "web_search"
+      )
+    ),
+    input = prompt
+  )
+
+  response <- httr2::request(openai_endpoint) |>
+    httr2::req_headers(
+      Authorization = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ) |>
+    httr2::req_body_json(
+      request_body,
+      auto_unbox = TRUE
+    ) |>
+    httr2::req_timeout(seconds = 1800) |>
+    httr2::req_retry(
+      max_tries = 3,
+      retry_on_failure = TRUE
+    ) |>
+    httr2::req_perform()
+
+  httr2::resp_check_status(response)
+
+  httr2::resp_body_json(
+    response,
+    simplifyVector = FALSE
+  )
+}
+
+
+# 6. Tekst uit het API-resultaat halen ---------------------------
+
+extract_output_text <- function(response_json) {
+
+  if (!is.null(response_json$output_text)) {
+    return(response_json$output_text)
+  }
+
+  output_items <- response_json$output
+
+  if (is.null(output_items) || length(output_items) == 0) {
+    stop("De API-response bevat geen output.")
+  }
+
+  text_parts <- purrr::map(
+    output_items,
+    function(item) {
+
+      if (is.null(item$content)) {
+        return(character())
+      }
+
+      purrr::map_chr(
+        item$content,
+        function(content_item) {
+
+          if (
+            !is.null(content_item$type) &&
+            content_item$type %in% c("output_text", "text") &&
+            !is.null(content_item$text)
+          ) {
+            return(content_item$text)
+          }
+
+          ""
+        }
+      )
+    }
+  ) |>
+    unlist(use.names = FALSE)
+
+  text_parts <- text_parts[nzchar(text_parts)]
+
+  if (length(text_parts) == 0) {
+    stop("Er kon geen tekst uit de API-response worden gehaald.")
+  }
+
+  paste(text_parts, collapse = "\n")
+}
+
+
+# 7. Blokken tussen markers uitlezen -----------------------------
+
+extract_between_markers <- function(text, start_marker, end_marker) {
+
+  pattern <- paste0(
+    "(?s)",
+    stringr::fixed(start_marker),
+    "\\s*(.*?)\\s*",
+    stringr::fixed(end_marker)
+  )
+
+  result <- stringr::str_match(text, pattern)[, 2]
+
+  if (is.na(result)) {
+    stop(
+      paste(
+        "Het blok tussen",
+        start_marker,
+        "en",
+        end_marker,
+        "is niet gevonden."
+      )
+    )
+  }
+
+  stringr::str_trim(result)
+}
+
+
+# 8. URL-normalisatie en controles -------------------------------
+
+normalise_url <- function(x) {
+
+  x <- dplyr::coalesce(x, "")
+  x <- stringr::str_trim(x)
+
+  # Verwijder vaak voorkomende trackingparameters.
+  x <- stringr::str_remove(
+    x,
+    "(\\?|&)(utm_source|utm_medium|utm_campaign|utm_term|utm_content)=.*$"
+  )
+
+  x
+}
+
+
+validate_url_format <- function(x) {
+
+  x == "" |
+    stringr::str_detect(
+      x,
+      "^https?://[^[:space:]]+$"
+    )
+}
+
+
+# 9. BibTeX maken ------------------------------------------------
+
+make_bibtex_key <- function(organisation, year, title) {
+
+  organisation <- organisation |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all("[^a-z0-9]+", "")
+
+  title_word <- title |>
+    stringr::str_to_lower() |>
+    stringr::str_extract("[a-z0-9]+") |>
+    dplyr::coalesce("rapport")
+
+  paste0(
+    stringr::str_sub(organisation, 1, 20),
+    year,
+    title_word
+  )
+}
+
+
+escape_bibtex <- function(x) {
+
+  x |>
+    dplyr::coalesce("") |>
+    stringr::str_replace_all("\\\\", "\\\\\\\\") |>
+    stringr::str_replace_all("\\{", "\\\\{") |>
+    stringr::str_replace_all("\\}", "\\\\}") |>
+    stringr::str_replace_all("&", "\\\\&") |>
+    stringr::str_replace_all("%", "\\\\%") |>
+    stringr::str_replace_all("_", "\\\\_")
+}
+
+
+create_bibtex <- function(data) {
+
+  purrr::pmap_chr(
+    data,
+    function(titel,
+             auteurs,
+             organisatie,
+             jaar,
+             publicatietype,
+             rapportnummer,
+             url_publicatiepagina,
+             url_document,
+             watercompartiment,
+             relevantie_arseen,
+             belangrijkste_bevindingen,
+             zoekstatus,
+             primaire_bron,
+             ...) {
+
+      auteurs_bib <- if (length(auteurs) == 0) {
+        organisatie
+      } else {
+        paste(auteurs, collapse = " and ")
+      }
+
+      selected_url <- dplyr::case_when(
+        nzchar(url_document) ~ url_document,
+        nzchar(url_publicatiepagina) ~ url_publicatiepagina,
+        TRUE ~ ""
+      )
+
+      key <- make_bibtex_key(
+        organisation = organisatie,
+        year = jaar,
+        title = titel
+      )
+
+      fields <- c(
+        paste0("  author = {", escape_bibtex(auteurs_bib), "}"),
+        paste0("  year = {", jaar, "}"),
+        paste0("  title = {", escape_bibtex(titel), "}"),
+        paste0("  institution = {", escape_bibtex(organisatie), "}")
+      )
+
+      if (nzchar(rapportnummer)) {
+        fields <- c(
+          fields,
+          paste0(
+            "  number = {",
+            escape_bibtex(rapportnummer),
+            "}"
+          )
+        )
+      }
+
+      if (nzchar(selected_url)) {
+        fields <- c(
+          fields,
+          paste0(
+            "  url = {",
+            escape_bibtex(selected_url),
+            "}"
+          )
+        )
+      }
+
+      paste0(
+        "@techreport{",
+        key,
+        ",\n",
+        paste(fields, collapse = ",\n"),
+        "\n}"
+      )
+    }
+  ) |>
+    paste(collapse = "\n\n")
+}
+
+
+# 10. Onderzoek uitvoeren ----------------------------------------
+
+message("De openbare-webliteratuurverkenning wordt uitgevoerd.")
+
+response_json <- run_web_research(
+  prompt = zoekprompt,
+  model = model,
+  api_key = api_key
+)
+
+jsonlite::write_json(
+  response_json,
+  path = file.path(output_dir, "ruwe_llm_response.json"),
+  pretty = TRUE,
+  auto_unbox = TRUE,
+  null = "null"
+)
+
+response_text <- extract_output_text(response_json)
+
+
+# 11. JSON-inventarisatie verwerken ------------------------------
+
+data_text <- extract_between_markers(
+  response_text,
+  "DATA_START",
+  "DATA_END"
+)
+
+# Verwijder eventuele Markdown code fences.
+data_text <- data_text |>
+  stringr::str_remove("^```json\\s*") |>
+  stringr::str_remove("^`*`\\s*") |>
+  stringr::str_remove("*\s*```$")
+
+research_data <- jsonli*e::fromJSON(
+  data_text,
+  simpli*yVector = FALSE
+)
+
+if (is.null(res*arch_data$rapporten)) {
+  stop("In*de LLM-uitvoer is geen rapportenli*st gevonden.")
+}
+
+rapporten <- pur*r::map_dfr(
+  research_data$rappor*en,
+  function(x) {
+
+    tibble::t*bble(
+      titel = dplyr::coalesc*(x$titel, ""),
+      auteurs = lis*(dplyr::coalesce(unlist(x$auteurs)* character())),
+      organisatie * dplyr::coalesce(x$organisatie, ""*,
+      jaar = suppressWarnings(as*integer(x$jaar)),
+      publicatie*ype = dplyr::coalesce(x$publicatie*ype, ""),
+      rapportnummer = dp*yr::coalesce(x$rapportnummer, ""),*      url_publicatiepagina = norma*ise_url(
+        x$url_publicatiep*gina
+      ),
+      url_document =*normalise_url(
+        x$url_docum*nt
+      ),
+      watercompartimen* = list(
+        dplyr::coalesce(
+*         unlist(x$watercompartimen*),
+          character()
+        )*      ),
+      relevantie_arseen =*dplyr::coalesce(
+        x$relevan*ie_arseen,
+        ""
+      ),
+   *  belangrijkste_bevindingen = dply*::coalesce(
+        x$belangrijkst*_bevindingen,
+        ""
+      ),
+*     zoekstatus = dplyr::coalesce(*$zoekstatus, ""),
+      primaire_b*on = isTRUE(x$primaire_bron)
+    )*  }
+)
+
+
+# 12. Opschonen en dedupli*eren -----------------------------*---
+
+rapporten_clean <- rapporten *>
+  dplyr::mutate(
+    title_key =*titel |>
+      stringr::str_to_low*r() |>
+      stringr::str_replace_*ll("[^[:alnum:]]+", " ") |>
+      *tringr::str_squish(),
+    auteurs_*sv = purrr::map_chr(
+      auteurs*
+      ~ paste(.x, collapse = "; "*
+    ),
+    watercompartiment_csv * purrr::map_chr(
+      watercompar*iment,
+      ~ paste(.x, collapse * "; ")
+    ),
+    geldige_url_publ*catiepagina = validate_url_format(*      url_publicatiepagina
+    ),
+*   geldige_url_document = validate*url_format(
+      url_document
+   *)
+  ) |>
+  dplyr::arrange(
+    dpl*r::desc(primaire_bron),
+    organi*atie,
+    dplyr::desc(jaar)
+  ) |>*  dplyr::distinct(
+    title_key,
+*   organisatie,
+    jaar,
+    .kee*_all = TRUE
+  )
+
+
+# 13. Waarschuwi*gen maken ------------------------*--------------
+
+invalid_urls <- ra*porten_clean |>
+  dplyr::filter(
+ *  !geldige_url_publicatiepagina |
+*     !geldige_url_document
+  )
+
+if*(nrow(invalid_urls) > 0) {
+
+  warn*ng(
+    paste0(
+      nrow(invalid*urls),
+      " rapport(en) hebben *en URL met een afwijkend formaat. *,
+      "Controleer deze regels ha*dmatig."
+    )
+  )
+}
+
+missing_core*data <- rapporten_clean |>
+  dplyr*:filter(
+    titel == "" |
+      o*ganisatie == "" |
+      is.na(jaar* |
+      (
+        url_publicatiep*gina == "" &
+          url_documen* == ""
+      )
+  )
+
+if (nrow(missi*g_core_data) > 0) {
+
+  warning(
+  * paste0(
+      nrow(missing_core_d*ta),
+      " rapport(en) missen ti*el, organisatie, jaar of URL. ",
+ *    "Deze moeten handmatig worden *econtroleerd."
+    )
+  )
+}
+
+
+# 14.*CSV opslaan ----------------------*-------------------------
+
+rapport*n_csv <- rapporten_clean |>
+  dply*::select(
+    titel,
+    auteurs =*auteurs_csv,
+    organisatie,
+    *aar,
+    publicatietype,
+    rappo*tnummer,
+    url_publicatiepagina,*    url_document,
+    watercompart*ment = watercompartiment_csv,
+    *elevantie_arseen,
+    belangrijkst*_bevindingen,
+    zoekstatus,
+    *rimaire_bron,
+    geldige_url_publ*catiepagina,
+    geldige_url_docum*nt
+  )
+
+readr::write_excel_csv2(
+ *rapporten_csv,
+  file.path(output_*ir, "rapporten_arseen.csv"),
+  na * ""
+)
+
+
+# 15. Markdownrapport opsl*an -------------------------------*----
+
+report_text <- extract_betwe*n_markers(
+  response_text,
+  "REP*RT_START",
+  "REPORT_END"
+)
+
+write*ines(
+  enc2utf8(report_text),
+  c*n = file.path(
+    output_dir,
+   *"rapporten_arseen_samenvatting.md"*  ),
+  useBytes = TRUE
+)
+
+
+# 16. B*bTeX opslaan ---------------------*-----------------------
+
+bibtex_te*t <- create_bibtex(rapporten_clean*
+
+writeLines(
+  enc2utf8(bibtex_te*t),
+  con = file.path(
+    output_*ir,
+    "referenties_arseen.bib"
+ *),
+  useBytes = TRUE
+)
+
+
+# 17. Nie*-gevonden organisaties opslaan ---*---------------------
+
+niet_gevond*n <- research_data$niet_gevonden_b*j
+
+if (!is.null(niet_gevonden) && *ength(niet_gevonden) > 0) {
+
+  nie*_gevonden_df <- purrr::map_dfr(
+  * niet_gevonden,
+    function(x) {
+*     tibble::tibble(
+        organ*satie = dplyr::coalesce(x$organisa*ie, ""),
+        toelichting = dpl*r::coalesce(x$toelichting, "")
+   *  )
+    }
+  )
+
+  readr::write_exce*_csv2(
+    niet_gevonden_df,
+    f*le.path(
+      output_dir,
+      "*rganisaties_zonder_geverifieerd_ra*port.csv"
+    ),
+    na = ""
+  )
+}*
+
+# 18. Controleoverzicht --------*---------------------------------
+*message("")
+message("Klaar.")
+mess*ge(
+  "Aantal unieke publicaties i* de inventarisatie: ",
+  nrow(rapp*rten_clean)
+)
+message(
+  "Aantal p*blicaties voor handmatige controle* ",
+  nrow(missing_core_data)
+)
+me*sage("")
+message("Aangemaakte best*nden:")
+
+output_files <- list.file*(
+  output_dir,
+  full.names = TRU*
+)
+
+message(
+  paste0("- ", output*files, collapse = "\n")
+)
+````
