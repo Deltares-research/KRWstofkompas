@@ -20,6 +20,7 @@ chemtrend_data <- get_substance_data_by_code(ds, substance_code = stof, trend_pe
 
 rm(ds)
 
+chemtrend_data_all <- get_all_substance_data(ds, trend_period = 0)
 
 chemtrend_meetpunten <- arrow::read_parquet(
   file.path(paths$raw, "chemtrend/chemtrend_parquet_all/location_points.parquet")
